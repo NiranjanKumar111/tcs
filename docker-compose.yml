@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: equipment-postgres
+    environment:
+      POSTGRES_DB: equipment_management
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - equipment_pgdata:/var/lib/postgresql/data
+
+volumes:
+  equipment_pgdata:
