@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../EquipmentManagementBackend.csproj" />
+    <Compile Remove="Console/**/*.cs" />
+    <ProjectReference Include="../LegacyWeb/EquipmentManagementBackend.Web.csproj" />
   </ItemGroup>
 </Project>

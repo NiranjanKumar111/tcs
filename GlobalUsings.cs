@@ -1,0 +1,2 @@
+global using EquipmentManagementBackend.Application;
+global using EquipmentManagementBackend.Controllers;

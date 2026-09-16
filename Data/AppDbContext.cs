@@ -5,6 +5,9 @@ namespace EquipmentManagementBackend.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    public DbSet<TicketComplianceVerification> TicketComplianceVerifications => Set<TicketComplianceVerification>();
+    public DbSet<TicketComplianceItem> TicketComplianceItems => Set<TicketComplianceItem>();
+    public DbSet<TicketCalibrationResult> TicketCalibrationResults => Set<TicketCalibrationResult>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Location> Locations => Set<Location>();
     public DbSet<EquipmentType> EquipmentTypes => Set<EquipmentType>();
@@ -25,6 +28,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     protected override void OnModelCreating(ModelBuilder b)
     {
         base.OnModelCreating(b);
+        b.Entity<TicketComplianceVerification>().ToTable("ticket_compliance_verifications");
+        b.Entity<TicketComplianceVerification>().HasOne<Ticket>().WithMany().HasForeignKey(x => x.TicketId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<TicketComplianceVerification>().HasOne<User>().WithMany().HasForeignKey(x => x.ApproverId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<TicketComplianceItem>().ToTable("ticket_compliance_items");
+        b.Entity<TicketComplianceItem>().HasOne<Ticket>().WithMany().HasForeignKey(x => x.TicketId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<TicketCalibrationResult>().ToTable("ticket_calibration_results");
+        b.Entity<TicketCalibrationResult>().HasOne<Ticket>().WithMany().HasForeignKey(x => x.TicketId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Ticket>().HasIndex(x => new { x.TicketType, x.Status, x.CreatedAt });
+        b.Entity<Equipment>().HasIndex(x => x.NextMaintenanceDate);
+        b.Entity<Equipment>().HasIndex(x => x.NextCalibrationDate);
 
         // Table names
         b.Entity<User>().ToTable("users");

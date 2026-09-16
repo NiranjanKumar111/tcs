@@ -1,0 +1,580 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Equipment Backend — Beginner Guide</title>
+<style>body{font:17px/1.65 system-ui,sans-serif;color:#17293b;max-width:1000px;margin:40px auto;padding:0 25px}
+h1{font-size:34px}h2{margin-top:48px;border-bottom:2px solid #c8dae9;padding-bottom:10px}
+pre{background:#eff4f8;padding:18px;overflow:auto;font-size:13px;line-height:1.5;white-space:pre-wrap}
+code{font-family:Consolas,monospace}.table-row{display:flex;border-bottom:1px solid #ccd8e2;font-size:14px}
+.table-row span{flex:1;padding:8px;overflow-wrap:anywhere}a{color:#1268a1}
+@media print{body{font-size:10pt;margin:0;max-width:none}h2{break-after:avoid}pre{font-size:8pt}a{color:inherit}}
+</style><body><p>Offline edition. Use your browser's Print → Save as PDF to create a PDF copy.</p><h1>Equipment Management Backend: From Zero to Independent Development</h1>
+<p>Beginner&#x27;s handbook for this project • Prepared 15 September 2026</p>
+<p>This document explains the actual application in this folder. It is intended to be read offline, without an AI assistant. Examples marked “exercise” are instructions for future work, not changes already made to your project. Passwords shown here are placeholders, never your actual password.</p>
+<h2>1. What you are building</h2>
+<p>Imagine a hospital with a central equipment store. Staff need to know what equipment exists, request a backup item for a ward and bed, reserve it, pick it up, and return it. Maintenance staff also need tickets and schedules.</p>
+<p>This project is the backend: the program that receives requests, checks business rules, and stores information. It does not include a finished frontend with hospital screens. Swagger is an interactive testing page, not the final hospital interface.</p>
+<p>You do not need a particular IDE to run this project. An IDE is an editor with conveniences such as debugging and autocomplete. The .NET SDK builds and runs the code. PostgreSQL stores the data. These are separate programs.</p>
+<p>Think of the application as this path:</p>
+<pre><code>Browser / mobile app / Swagger / Postman
+                  |
+         HTTP request with JSON
+                  v
+Controller: chooses the operation
+                  v
+Service: checks rules and performs the operation
+                  v
+AppDbContext + EF Core + Npgsql: talk to the database
+                  v
+PostgreSQL: stores rows and enforces database constraints
+                  |
+         Result travels back as JSON</code></pre>
+<p>Equipment and backup requests follow this service structure. The older reference, maintenance-schedule, and ticket controllers still access AppDbContext directly for some work. AssignmentService helps ticket creation choose a technician and approver. Do not assume every controller is already separated into a service.</p>
+<h2>2. Learn these names first</h2>
+<div class="table-row"><span>Name</span><span>Meaning in plain language</span><span>Where you see it</span></div>
+<div class="table-row"><span>C#</span><span>The programming language used to write the app</span><span>Files ending in <code>.cs</code></span></div>
+<div class="table-row"><span>.NET</span><span>The platform that executes C# applications</span><span><code>net8.0</code> in the project file</span></div>
+<div class="table-row"><span>SDK</span><span>Tools for building and developing applications</span><span><code>dotnet build</code>, <code>dotnet run</code></span></div>
+<div class="table-row"><span>Runtime</span><span>Software needed to execute a built application</span><span>Included with the SDK</span></div>
+<div class="table-row"><span>ASP.NET Core</span><span>The part of .NET used to build web APIs</span><span>Controllers and Program.cs</span></div>
+<div class="table-row"><span>NuGet</span><span>The package system for .NET libraries</span><span>PackageReference entries</span></div>
+<div class="table-row"><span>Entity</span><span>A C# object representing stored business data</span><span>Equipment, User, BackupRequest</span></div>
+<div class="table-row"><span>Table / row / column</span><span>A collection / one record / one field</span><span>PostgreSQL tables</span></div>
+<div class="table-row"><span>Primary key</span><span>The identity of a record</span><span>Equipment.Id</span></div>
+<div class="table-row"><span>Foreign key</span><span>A value pointing to another record</span><span>Equipment.EquipmentTypeId</span></div>
+<div class="table-row"><span>DTO</span><span>The data accepted or returned by an API</span><span>CreateEquipmentRequest</span></div>
+<div class="table-row"><span>Service</span><span>A class implementing business rules</span><span>EquipmentService</span></div>
+<div class="table-row"><span>Controller</span><span>An entry point for HTTP requests</span><span>EquipmentController</span></div>
+<div class="table-row"><span>API endpoint</span><span>A method and URL clients can call</span><span>POST /api/equipment</span></div>
+<div class="table-row"><span>JSON</span><span>A text format for sending structured data</span><span><code>{ &quot;name&quot;: &quot;Ventilator&quot; }</code></span></div>
+<div class="table-row"><span>EF Core</span><span>Library translating supported C# database operations to SQL</span><span>AppDbContext queries</span></div>
+<div class="table-row"><span>Npgsql</span><span>PostgreSQL driver/provider used by EF Core</span><span>UseNpgsql</span></div>
+<div class="table-row"><span>SQL</span><span>The database query language</span><span>SELECT, INSERT, UPDATE</span></div>
+<div class="table-row"><span>Migration</span><span>A versioned instruction set for changing database structure</span><span>Migrations folder</span></div>
+<div class="table-row"><span>Transaction</span><span>A group of changes committed together or rolled back</span><span>Reservation workflow</span></div>
+<div class="table-row"><span>Dependency injection</span><span>Framework supplies objects a class needs</span><span>Constructor parameters</span></div>
+<div class="table-row"><span>Async / await</span><span>Wait for I/O without keeping a thread blocked throughout the wait</span><span>SaveChangesAsync</span></div>
+<div class="table-row"><span>pgAdmin</span><span>A graphical tool to inspect and manage PostgreSQL</span><span>Tables and Query Tool</span></div>
+<div class="table-row"><span>psql</span><span>PostgreSQL command-line client</span><span>Population script</span></div>
+<p>An entity is not itself a database table. EF Core reads your entity definitions and mapping rules; migrations create the corresponding database structure. Changing a class alone does not alter an existing table.</p>
+<h2>3. What to install and what to copy</h2>
+<p>For the existing project, install a .NET 8 SDK and PostgreSQL on the new computer. Install pgAdmin if you want a graphical database browser. A C#-capable IDE is helpful but the terminal commands work independently of the editor.</p>
+<p>This project currently targets .NET 8. The installed SDK previously verified on the original computer was 8.0.425. You can use a compatible installed .NET 8 SDK: global.json selects the latest installed .NET 8 feature band starting at 8.0.100. It does not automatically install an SDK or select .NET 10 instead.</p>
+<p>Copy the whole project folder, especially these files and directories:</p>
+<pre><code>EquipmentManagementBackend.csproj
+global.json
+.config/dotnet-tools.json
+Program.cs
+appsettings.json
+Properties/
+Models/
+DTOs/
+Data/
+Services/
+Controllers/
+Migrations/                 including Designer and snapshot files
+Tests/
+scripts/
+docs/
+docker-compose.yml          optional Docker database setup</code></pre>
+<p>The folders bin and obj are generated build output and can be regenerated. Your actual PostgreSQL rows are not in these project folders. Copying the source code does not copy the database. Section 20 explains database transfer.</p>
+<p>Open a terminal in the folder containing EquipmentManagementBackend.csproj. All project commands in this guide assume that working directory unless stated otherwise.</p>
+<pre><code>dotnet --list-sdks
+dotnet --version
+dotnet restore
+dotnet tool restore
+dotnet build</code></pre>
+<p>Read the results: the SDK version should begin with 8; restore downloads packages; tool restore installs the project-local EF tool; build should end with “Build succeeded.” Internet access is normally needed for the first package/tool restore. A computer with already cached dependencies can often build offline, but a fresh computer cannot download missing dependencies without network access.</p>
+<p>The current project package versions are project choices, not a claim that they will always be the newest releases:</p>
+<div class="table-row"><span>Package/tool</span><span>Version in this project</span><span>Purpose</span></div>
+<div class="table-row"><span>Microsoft.EntityFrameworkCore</span><span>8.0.31</span><span>Database object/query support</span></div>
+<div class="table-row"><span>Microsoft.EntityFrameworkCore.Relational</span><span>8.0.31</span><span>Relational database functionality; explicitly aligned to avoid assembly mismatch</span></div>
+<div class="table-row"><span>Microsoft.EntityFrameworkCore.Design</span><span>8.0.31</span><span>Migration design-time tooling</span></div>
+<div class="table-row"><span>Npgsql.EntityFrameworkCore.PostgreSQL</span><span>8.0.11</span><span>PostgreSQL integration</span></div>
+<div class="table-row"><span>Swashbuckle.AspNetCore</span><span>8.0.0</span><span>Swagger/OpenAPI testing and description</span></div>
+<div class="table-row"><span>dotnet-ef local tool</span><span>8.0.31</span><span>Migration commands</span></div>
+<p>Third-party package versions do not all have to match the .NET runtime number exactly. Compatibility matters. Keep related Microsoft EF Core packages aligned when updating them.</p>
+<h2>4. Connect PostgreSQL, step by step</h2>
+<p>PostgreSQL runs as a separate database server. The application connects using a host, port, database name, username, and password. On the original computer PostgreSQL 18 was installed as a Windows service and listened on port 5432.</p>
+<p>In pgAdmin, connect/register a server with host localhost, port 5432, and your PostgreSQL login, commonly postgres. The password is the one you set for that PostgreSQL account during installation. An application User row named “Admin User” is not a PostgreSQL login. These are different systems.</p>
+<p>Place the connection in appsettings.json:</p>
+<pre><code>{
+  &quot;ConnectionStrings&quot;: {
+    &quot;DefaultConnection&quot;: &quot;Host=localhost;Port=5432;Database=equipment_management;Username=postgres;Password=YOUR_POSTGRES_PASSWORD&quot;
+  },
+  &quot;Logging&quot;: {
+    &quot;LogLevel&quot;: {
+      &quot;Default&quot;: &quot;Information&quot;,
+      &quot;Microsoft.AspNetCore&quot;: &quot;Warning&quot;
+    }
+  },
+  &quot;AllowedHosts&quot;: &quot;*&quot;
+}</code></pre>
+<div class="table-row"><span>Connection component</span><span>Explanation</span></div>
+<div class="table-row"><span>Host=localhost</span><span>PostgreSQL runs on the same computer as this backend process</span></div>
+<div class="table-row"><span>Port=5432</span><span>PostgreSQL&#x27;s configured listening port; it is different from API port 5080</span></div>
+<div class="table-row"><span>Database=equipment_management</span><span>The database containing this application&#x27;s tables</span></div>
+<div class="table-row"><span>Username=postgres</span><span>A PostgreSQL account allowed to connect and change this database</span></div>
+<div class="table-row"><span>Password=...</span><span>That account&#x27;s password</span></div>
+<p>Program.cs reads the named connection and registers the database context:</p>
+<pre><code>builder.Services.AddDbContext&lt;AppDbContext&gt;(options =&gt;
+    options.UseNpgsql(builder.Configuration.GetConnectionString(&quot;DefaultConnection&quot;)));</code></pre>
+<p>Read this as: “When something needs AppDbContext, create it configured to use PostgreSQL and this connection string.” AppDbContext is not a database server and UseNpgsql does not install PostgreSQL.</p>
+<p>For a new database, run:</p>
+<pre><code>dotnet ef database update
+dotnet run</code></pre>
+<p>The migration command can create the database if the PostgreSQL account has permission. If it cannot, create an empty equipment_management database in pgAdmin first, owned by the appropriate account, then repeat the command. Program.cs also applies pending migrations at startup and seeds reference rows.</p>
+<p>On this project&#x27;s original database, both migrations have already been applied. Do not run the legacy baseline script just because you switch IDEs.</p>
+<p>For a password override without putting it in a shareable file, the app and migration factory support environment configuration:</p>
+<pre><code>$env:ConnectionStrings__DefaultConnection = &#x27;Host=localhost;Port=5432;Database=equipment_management;Username=postgres;Password=YOUR_POSTGRES_PASSWORD&#x27;
+dotnet run</code></pre>
+<p>This override belongs to the current terminal and its child processes. Another terminal may still use the file. Avoid sharing credentials in source control or screenshots. The provided population script and local demo helper read appsettings.json directly, so an environment override for the API does not redirect those helpers.</p>
+<p>The API normally starts at http://localhost:5080, according to Properties/launchSettings.json. Open http://localhost:5080/swagger. If the terminal shows another address, use that address. Stop the server with Ctrl+C before rebuilding if Windows reports a locked executable.</p>
+<h2>5. Read a small amount of C# before reading the models</h2>
+<pre><code>public class Equipment
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? SerialNumber { get; set; }
+    public bool IsActive { get; set; } = true;
+}</code></pre>
+<p>“class” defines a type of object. “public” allows other code to use it. A property is a named value on that object. “get; set;” allows reading and changing the property. “long” is a whole-number type; “string” is text; “bool” is true or false. A question mark makes a value nullable: SerialNumber may be absent. The initializers give new C# objects starting values; they do not automatically create SQL defaults for every external database insert.</p>
+<pre><code>var item = new Equipment { Name = &quot;Ventilator&quot; };
+db.Equipment.Add(item);
+await db.SaveChangesAsync();</code></pre>
+<p>“var” asks the compiler to infer the type. “new” creates an object. Add tells the context to track a new entity; SaveChangesAsync sends the insert to PostgreSQL. After a successful generated-ID insert, item.Id contains the database-assigned ID.</p>
+<p>You will also see modern C# primary constructors:</p>
+<pre><code>public class EquipmentController(EquipmentService service) : ControllerBase</code></pre>
+<p>This declares a controller whose constructor requires an EquipmentService. “: ControllerBase” means it inherits useful web-controller behavior. The framework supplies the service through dependency injection. This syntax is supported by the .NET 8 SDK&#x27;s C# compiler.</p>
+<h2>6. Design the entities from the business requirements</h2>
+<p>Start with the things you need to remember, not with URLs. We needed users, places, equipment categories, individual equipment, maintenance work, backup requests, reservations, and shortages.</p>
+<p>The entities are in Models/CoreModels.cs. There are 16 mapped entity types:</p>
+<div class="table-row"><span>Entity / table</span><span>What one row represents</span><span>Important fields</span></div>
+<div class="table-row"><span>User / users</span><span>A person represented in the application</span><span>Id, Name, Email, Role, IsActive</span></div>
+<div class="table-row"><span>Location / locations</span><span>An equipment home location</span><span>Code, Name, IsCentralWarehouse, IsActive</span></div>
+<div class="table-row"><span>EquipmentType / equipment_types</span><span>A category such as ventilator</span><span>TypeCode, TypeName</span></div>
+<div class="table-row"><span>Equipment / equipment</span><span>One physical item, not a category</span><span>EquipmentCode, EquipmentTypeId, LocationId, SerialNumber</span></div>
+<div class="table-row"><span>EquipmentTechnician / equipment_technicians</span><span>Maintenance relationship between item and technician</span><span>EquipmentId + TechnicianId</span></div>
+<div class="table-row"><span>EquipmentApprover / equipment_approvers</span><span>Maintenance relationship between item and approver</span><span>EquipmentId + ApproverId</span></div>
+<div class="table-row"><span>EquipmentCalibrationRule / equipment_calibration_rule</span><span>A calibration instruction for an item</span><span>RuleId, RuleText, EquipmentId</span></div>
+<div class="table-row"><span>Ticket / tickets</span><span>Maintenance work for a specific item</span><span>TicketId, Status, AssignedTo, ApproverId, VersionNumber</span></div>
+<div class="table-row"><span>TicketHistory / ticket_history</span><span>One recorded maintenance ticket action</span><span>TicketId, Action, PerformedBy, PerformedAt</span></div>
+<div class="table-row"><span>TicketDocument / ticket_documents</span><span>Metadata about a document attached to a ticket</span><span>StoragePath, file names, UploadedBy</span></div>
+<div class="table-row"><span>MaintenanceSchedule / maintenance_schedules</span><span>A planned maintenance task</span><span>EquipmentId, DueDate, ScheduleType, IsCompleted</span></div>
+<div class="table-row"><span>BackupRequest / backup_requests</span><span>A person&#x27;s request for one item at a ward/bed</span><span>RequestedBy, RequestedWard, BedNumber, EquipmentTypeId, Status</span></div>
+<div class="table-row"><span>BackupAllocation / backup_allocations</span><span>A particular assignment attempt for a backup request</span><span>RequestId, EquipmentId, Status, ReservationExpiresAt</span></div>
+<div class="table-row"><span>BackupEscalation / backup_escalations</span><span>A stock shortage needing attention</span><span>RequestId, AssignedAdminId, ResolvedAt</span></div>
+<div class="table-row"><span>Notification / notifications</span><span>A stored message for an application user</span><span>RecipientUserId, Title, Message, IsRead</span></div>
+<div class="table-row"><span>AuditLog / audit_logs</span><span>A prepared audit-record structure</span><span>EntityType, EntityId, Action, RetentionUntil</span></div>
+<p>Important distinction: EquipmentType is “ventilator”; Equipment is “the ventilator with serial SN-001.” A request states what kind of item is needed; an allocation records which physical item was actually reserved. Separating them preserves history when a reservation expires and a later attempt uses a different item.</p>
+<p>Every new backup request must have quantity 1. Multiple items require separate requests. BedNumber is text, so values such as ICU-B12 are possible. RequestedWard is an enum: one of ICU, ER, OT, GENERAL, OTHER.</p>
+<p>The current equipment record does not contain an Availability column. Availability is computed from IsActive and allocation records. This avoids maintaining two separate status values that could disagree.</p>
+<p>Equipment.LocationId is the home/return location. Pickup does not move the equipment row to the ward. The active BackupRequest records the ward and bed where it is being used.</p>
+<p>Some entities are preparation for future features. TicketDocument has no upload endpoint. AuditLog does not mean every request is automatically audited or that archive retention is enforced. Notification rows are created for shortages, but there is no notification delivery, email, or notification-list API. Delivery/receipt fields and some older status values exist but have no corresponding workflow endpoints yet.</p>
+<h2>7. Relationships: how records connect</h2>
+<pre><code>EquipmentType 1 ---- many Equipment
+Location      1 ---- many Equipment
+User          1 ---- many BackupRequest
+EquipmentType 1 ---- many BackupRequest
+BackupRequest 1 ---- many BackupAllocation (history)
+Equipment     1 ---- many BackupAllocation (history)
+BackupRequest 1 ---- many BackupEscalation (history)
+Equipment     1 ---- many Ticket
+Ticket        1 ---- many TicketHistory</code></pre>
+<p>“1 ---- many” means one type can be used by many equipment items, but each equipment item has one equipment type.</p>
+<p>Suppose EquipmentType.Id is 1 for ventilators. An Equipment row with EquipmentTypeId=1 refers to that category. A foreign key prevents inserting a reference to a category that does not exist. A navigation property such as Equipment.EquipmentType lets C# code work with the related object when loaded.</p>
+<p>EquipmentTechnician and EquipmentApprover have composite keys: two columns together identify the row. This prevents repeating the same maintenance relationship. These assignments are not reservations. Several technicians may maintain the same item; only one active backup allocation can occupy it.</p>
+<h2>8. AppDbContext: the bridge between objects and tables</h2>
+<p>Open Data/AppDbContext.cs. It inherits from EF Core&#x27;s DbContext. Its constructor receives database configuration. Each DbSet gives code a way to query or change a particular kind of entity:</p>
+<pre><code>public DbSet&lt;Equipment&gt; Equipment =&gt; Set&lt;Equipment&gt;();</code></pre>
+<p>This does not load every equipment row at startup. It is a query entry point. OnModelCreating describes mappings and database rules:</p>
+<pre><code>b.Entity&lt;Equipment&gt;().ToTable(&quot;equipment&quot;);
+b.Entity&lt;Equipment&gt;().HasIndex(x =&gt; x.EquipmentCode).IsUnique();
+b.Entity&lt;Equipment&gt;().HasOne(x =&gt; x.EquipmentType)
+    .WithMany().HasForeignKey(x =&gt; x.EquipmentTypeId)
+    .OnDelete(DeleteBehavior.Restrict);</code></pre>
+<p>The first line chooses the table name. The second prevents duplicate equipment codes at database level. The remaining lines map a relationship and prevent deleting a referenced equipment type while equipment still points to it.</p>
+<p>Restrict rejects physical deletion of referenced data. Cascade physically deletes dependent rows when the parent is deleted. SetNull clears an optional reference. These database behaviors are different from the application&#x27;s equipment soft delete, which only sets IsActive=false.</p>
+<p>The context converts enums to strings in PostgreSQL. A status is stored as “reserved” rather than an integer. Program.cs separately configures enum strings for JSON. Database conversion and HTTP serialization are two separate settings. Renaming an enum member can therefore require migrating stored string values, not just editing C#.</p>
+<p>For backup allocations, partial unique indexes apply only to rows with Status reserved or in_use. Historical returned/expired/cancelled rows can coexist. There is one such index per EquipmentId and another per RequestId. BackupEscalation has a unique index per RequestId only while ResolvedAt is null.</p>
+<p>Other indexes help frequent searches. Ticket.VersionNumber is a concurrency token, meaning EF checks it during writes to detect another writer&#x27;s update.</p>
+<p>The design-time factory, Data/AppDbContextFactory.cs, creates the context for dotnet ef commands. It lets migration tools inspect the model without starting the web server and its background worker. It reads appsettings.json and environment variables; unlike Program.cs&#x27;s standard builder, it does not explicitly add appsettings.Development.json.</p>
+<h2>9. Migrations: turn the design into actual tables</h2>
+<p>We use an EF Core code-first workflow: define the C# model and mapping, generate a migration, review it, and apply it to PostgreSQL.</p>
+<pre><code>Edit entities / OnModelCreating
+           |
+dotnet ef migrations add ChangeName
+           |
+Generated C# migration + Designer + updated model snapshot
+           |
+Review the generated operations
+           |
+dotnet ef database update
+           |
+PostgreSQL executes schema changes and records migration history</code></pre>
+<p>The EF tool compares the current model with its stored model snapshot when generating a migration. It is not comparing your current table data row by row. This is why manually adding columns in pgAdmin can make the model history and database disagree. See the <a href="https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/">EF Core migration overview</a> for the official description.</p>
+<p>Your files have three different jobs:</p>
+<div class="table-row"><span>File</span><span>Job</span><span>Should a beginner edit it?</span></div>
+<div class="table-row"><span>Timestamp_Name.cs</span><span>Up applies changes; Down describes reversal</span><span>Review every time; edit intentionally when data transformation is necessary</span></div>
+<div class="table-row"><span>Timestamp_Name.Designer.cs</span><span>Generated model metadata associated with that migration</span><span>Normally no</span></div>
+<div class="table-row"><span>AppDbContextModelSnapshot.cs</span><span>Generated description of the latest model for the next comparison</span><span>Normally no</span></div>
+<p>The Designer.cs tab you have open is generated output. To add an equipment field, start in Models/CoreModels.cs, not in the Designer file.</p>
+<p>The two committed migrations are:</p>
+<p>1. 20260914160344_InitialSchema: creates the original 16-table schema and relationships.</p>
+<p>2. 20260914161134_BackupReservationWorkflow: adds bed numbers, central warehouse flag, allocation lifecycle/timestamps, nullable escalation assignment, and unique active-allocation indexes.</p>
+<p>The second migration also transforms existing allocation data. Existing non-terminal allocations are conservatively treated as in_use so an upgrade cannot accidentally offer already occupied equipment. It preserves existing records instead of clearing the database. Duplicate historical active assignments or open escalations must be reconciled if they prevent new unique indexes from being created.</p>
+<p>Useful commands:</p>
+<pre><code>dotnet tool restore
+dotnet ef migrations list
+dotnet ef database update
+dotnet ef migrations has-pending-model-changes
+dotnet ef migrations script --idempotent --output migration-review.sql</code></pre>
+<p>The migration history table is named __EFMigrationsHistory. A migration is recorded there once applied. Starting the app again does not reinsert all equipment or reapply an already recorded migration.</p>
+<p>The original scaffold used EnsureCreated, which creates a new schema but does not evolve an existing schema through migrations. We replaced it with MigrateAsync. The legacy Data/baseline-existing.sql script is only for an original pre-migration EnsureCreated database whose existing schema matches the original model. It records the initial migration before the workflow upgrade. It is not needed for a new database, this already migrated database, or a normal restored copy of it.</p>
+<p>Do not delete migration files to fix a database error, and do not routinely recreate migrations already applied elsewhere. For a wrong, unapplied latest migration, dotnet ef migrations remove can remove it after you understand its state. For applied/shared changes, a new corrective migration is usually clearer. Down operations can lose data, so inspect them before any rollback. Official deployment guidance is in <a href="https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying">Applying migrations</a>.</p>
+<h2>10. DTOs: choose what the client can send</h2>
+<p>An entity describes storage. A request DTO describes input for one action. They should not automatically be the same thing. A client creating equipment should not choose its database Id or assign itself a reservation state.</p>
+<p>DTOs/Requests.cs contains CreateEquipmentRequest, UpdateEquipmentRequest, CreateBackupRequestRequest and ticket/assignment inputs. DTOs/WorkflowDtos.cs contains filters, pagination, and response wrappers.</p>
+<pre><code>public record BackupActorRequest([Range(1, long.MaxValue)] long PerformedBy);</code></pre>
+<p>A record is a concise data-carrying C# type. This record has one value, PerformedBy. The Range annotation requires a positive ID during HTTP validation. For positional records, validation attributes belong on constructor parameters, not property-targeted attributes. A real HTTP test caught and corrected this issue during development.</p>
+<p>Annotation validation is not enough for business rules. An ID of 99 may be positive but refer to no actual user. The service checks the database for an active user. Equipment creation also checks lengths, unique codes, and active type/location references.</p>
+<p>PagedResult returns Items, TotalCount, Page, PageSize, and TotalPages. An equipment response wraps the stored entity plus computed Availability. A backup detail response includes the request, current reservation, allocation history, escalation history, and server UTC time.</p>
+<h2>11. EquipmentService: CRUD, filtering, and pagination</h2>
+<p>CRUD means create, read, update, delete. Open Services/EquipmentService.cs.</p>
+<p>CreateAsync validates input, checks the referenced type/location/user, checks the code, creates an Equipment object, saves it, and returns details. A database unique index protects against duplicate codes even if two requests pass the initial application check at almost the same time.</p>
+<p>GetAsync finds the item, includes its type/location, and computes availability. ListAsync adds optional filters to a database query. UpdateAsync changes editable fields. DeleteAsync performs a soft delete. AssignAsync manages maintenance technician/approver links.</p>
+<pre><code>var items = db.Equipment.AsNoTracking();
+items = items.Where(e =&gt; e.IsActive);
+var page = await items.OrderBy(e =&gt; e.Id)
+    .Skip((pageNumber - 1) * pageSize)
+    .Take(pageSize)
+    .ToListAsync();</code></pre>
+<p>This teaching excerpt is the shape of the query, with simplified variable names. Where filters records. OrderBy creates a stable order. Skip passes over previous pages. Take limits the result. ToListAsync executes the query. For page 3 and page size 10, Skip is 20, so you receive the next ten records.</p>
+<p>AsNoTracking avoids tracking objects that you only intend to read. Include loads related data such as Location. AnyAsync checks existence. CountAsync counts matching records. SingleOrDefaultAsync expects at most one match. FirstOrDefaultAsync picks the first match or returns null. EF translates supported expressions to SQL, so filtering and pagination happen in the database rather than loading everything into memory first.</p>
+<p>The implementation uses an intermediate anonymous projection for filtering computed availability, then constructs EquipmentView results. This was checked against PostgreSQL because not every C# expression can be translated into SQL; an earlier record-constructor projection could not be filtered by EF.</p>
+<p>Default IsActive filtering is true; page starts at 1; default page size is 20 and maximum is 100. Search checks name, code, and serial number case-insensitively. An active item is available when there is no in-use allocation and no unexpired reservation.</p>
+<p>Before deleting, deactivating, moving, or changing the type of occupied equipment, the service rejects the operation with 409. Editing descriptive fields such as Name remains possible. The equipment code is not editable through the current update DTO.</p>
+<h2>12. BackupReservationService: follow a real request</h2>
+<p>Suppose there are two available ventilators, A and B, in the central warehouse. Staff 4 requests a ventilator for ICU bed B12 and prefers A.</p>
+<p>1. The controller deserializes JSON into CreateBackupRequestRequest.</p>
+<p>2. CreateAsync checks bed number, quantity=1, ward, priority, and active references.</p>
+<p>3. It begins the inventory transaction and takes the shared database lock.</p>
+<p>4. It releases expired reservations within that transaction.</p>
+<p>5. It inserts a BackupRequest and obtains its generated Id.</p>
+<p>6. ReserveWithinTransactionAsync searches active items of that type at active central warehouse locations with no active allocation.</p>
+<p>7. It prefers requestedEquipmentId if available, otherwise the lowest-ID matching available item.</p>
+<p>8. It creates a reserved BackupAllocation with a deadline 20 minutes after allocation.</p>
+<p>9. It changes the request to reserved and resolves any open shortage escalation for that request.</p>
+<p>10. It saves and commits, then returns the request, actual selected equipment, allocation ID, and timing fields.</p>
+<p>Supplying a preferred item still requires that it exists, is active, matches the type, and belongs to the active central warehouse. An invalid ID is a 400 input error. An occupied but valid preferred item triggers fallback selection, not an immediate shortage.</p>
+<p>When staff 5 also asks for A, the service sees that A is occupied and reserves B. When a third request arrives and neither A nor B is available, the request becomes escalated. This is a successful creation with a shortage outcome, not a failed HTTP request.</p>
+<p>Escalation uses BackupEscalation, not the maintenance Ticket entity. A maintenance Ticket requires a particular EquipmentId; a shortage may have no available physical item. The service assigns an open escalation to the active admin with the fewest unresolved escalations, then lowest ID. If there is no active admin, AssignedAdminId stays null. A Notification row is inserted when an admin is selected.</p>
+<p>The same request cannot have duplicate unresolved escalations. Retrying after equipment becomes available resolves its existing escalation. There is no automatic first-in-first-out waiting queue: an escalated request needs an explicit reserve retry. Priority is recorded but does not currently reorder an automatic allocation queue.</p>
+<h2>13. Why two people cannot reserve the same equipment</h2>
+<p>A normal “check then insert” is unsafe by itself:</p>
+<pre><code>Staff A reads: item free
+Staff B reads: item free
+Staff A inserts a reservation
+Staff B inserts another reservation</code></pre>
+<p>The application uses two protections. First, InventoryTransaction begins a PostgreSQL transaction and calls pg_advisory_xact_lock with a shared numeric key. All application instances using this database and workflow use the same key. One inventory operation waits while another holds the lock; then it rechecks availability using committed data. This is a transaction-level application lock, not a browser lock or a separate per-equipment row lock.</p>
+<p>Second, PostgreSQL&#x27;s partial unique indexes reject two active allocations for the same item or request. This protects the invariant even if someone writes outside the normal service. Such a conflicting external write is mapped to a conflict response; normal concurrent service requests are serialized and can select alternatives.</p>
+<pre><code>Staff A: acquire lock -&gt; choose A -&gt; commit/release lock
+Staff B: wait         -&gt; acquire -&gt; see A occupied -&gt; choose B -&gt; commit
+Staff C: acquire      -&gt; see no matching free stock -&gt; escalate -&gt; commit</code></pre>
+<p>Commit makes the transaction permanent. If an error occurs before commit, disposal rolls back that transaction&#x27;s changes. The advisory lock is automatically released when the transaction ends. This coarse lock favors straightforward correctness over maximum throughput; it serializes inventory work, including some reads that process expiry. PostgreSQL describes transaction advisory locks in its <a href="https://www.postgresql.org/docs/18/explicit-locking.html#ADVISORY-LOCKS">locking documentation</a>.</p>
+<p>Do not replace this with a C# lock statement alone. A C# lock coordinates one application process, not multiple backend instances connected to the same database. Also, DbContext is not thread-safe: concurrent test requests use separate contexts.</p>
+<h2>14. Reservation states and the 20-minute timer</h2>
+<div class="table-row"><span>Event</span><span>Request status</span><span>Allocation status</span><span>Equipment availability</span></div>
+<div class="table-row"><span>Matching item selected</span><span>reserved</span><span>reserved</span><span>reserved</span></div>
+<div class="table-row"><span>No matching stock</span><span>escalated</span><span>No current allocation</span><span>No change to other equipment</span></div>
+<div class="table-row"><span>Pickup before deadline</span><span>in_use</span><span>in_use</span><span>in_use</span></div>
+<div class="table-row"><span>Deadline reached without pickup</span><span>unreserved</span><span>expired</span><span>available if active</span></div>
+<div class="table-row"><span>Return after pickup</span><span>returned</span><span>returned</span><span>available if active</span></div>
+<div class="table-row"><span>Cancel before pickup</span><span>cancelled</span><span>cancelled if one was reserved</span><span>available if active</span></div>
+<p>Expiry is inclusive: now greater than or equal to ReservationExpiresAt is too late. Pickup changes status and records PickedUpBy/PickedUpAt. A picked-up item does not expire after twenty minutes; it stays in_use until returned. Return means the caller confirms physical return to the warehouse; the software cannot sense physical movement.</p>
+<p>The timer is stored as timestamps, not only as a countdown in the browser. ReservationExpiryWorker runs while the backend runs, immediately and then roughly every 15 seconds. It creates a fresh dependency-injection scope, gets a scoped service, and calls ExpireAsync. The worker logs failures and retries in a later cycle.</p>
+<p>Reservation operations and request detail/list reads also process expiry. Pickup additionally checks the exact deadline. Even if the worker has not yet persisted an expiry, it does not grant a grace period for pickup. If the app is stopped, no worker is running; on restart it catches up using persisted deadlines.</p>
+<p>The frontend can calculate remaining seconds from ReservationExpiresAt and ServerTimeUtc or use RemainingSeconds. It should refresh after actions and when the timer reaches zero. The server decides validity; a browser&#x27;s inaccurate clock cannot extend the reservation.</p>
+<p>Pickup and return URLs include both requestId and allocationId. A request can have many historical allocations. Using the particular allocation ID prevents an old page from picking up a newer reservation after its previous one expired. Retrying reserve on an already reserved request does not reset the deadline. Repeating pickup on the same in-use allocation or return on an already returned allocation does not create another assignment.</p>
+<p>Do not confuse all enum values with implemented actions. Older request statuses such as delivered or received remain defined but there are no deliver/receive endpoints in this version.</p>
+<h2>15. Program.cs and dependency injection: how everything starts</h2>
+<p>Read Program.cs from top to bottom:</p>
+<p>1. WebApplication.CreateBuilder creates configuration, logging, and the service container.</p>
+<p>2. AddControllers registers controller support. JSON settings use enum strings and ignore reference cycles during serialization.</p>
+<p>3. AddProblemDetails and AddExceptionHandler register structured error handling.</p>
+<p>4. Swagger services generate the API description and testing page.</p>
+<p>5. AddDbContext registers PostgreSQL-backed AppDbContext.</p>
+<p>6. AddScoped registers AssignmentService, EquipmentService, and BackupReservationService.</p>
+<p>7. AddSingleton(TimeProvider.System) provides a clock abstraction.</p>
+<p>8. AddHostedService registers the expiry worker.</p>
+<p>9. Build constructs the application.</p>
+<p>10. UseExceptionHandler installs error handling; Swagger is enabled only in Development.</p>
+<p>11. UseHttpsRedirection enables HTTPS redirection when configured; MapControllers maps controller routes.</p>
+<p>12. A startup scope applies pending migrations and seeds reference data.</p>
+<p>13. Run starts serving requests and running hosted services.</p>
+<p>Scoped means a service instance belongs to a scope, usually one HTTP request. Its DbContext belongs to that scope too. Singleton means one registered instance for the lifetime of this application process. The hosted worker lives longer than a request, so it creates scopes instead of holding one shared DbContext forever.</p>
+<p>Constructor dependency injection makes the chain explicit:</p>
+<pre><code>EquipmentController needs EquipmentService
+EquipmentService needs AppDbContext, BackupReservationService, TimeProvider
+BackupReservationService needs AppDbContext and TimeProvider</code></pre>
+<p>You normally do not write new EquipmentService inside a controller. The framework constructs it using the registrations. If a class is not registered, startup/request handling can report “Unable to resolve service.” ASP.NET Core&#x27;s <a href="https://learn.microsoft.com/en-in/aspnet/core/fundamentals/?view=aspnetcore-8.0">fundamentals guide</a> introduces configuration, middleware, and dependency injection.</p>
+<h2>16. Controllers and HTTP, with one complete example</h2>
+<pre><code>[ApiController]
+[Route(&quot;api/equipment&quot;)]
+public class EquipmentController(EquipmentService service) : ControllerBase
+{
+    [HttpGet(&quot;{id:long}&quot;)]
+    public async Task&lt;IActionResult&gt; Get(long id, CancellationToken ct)
+        =&gt; Ok(await service.GetAsync(id, ct));
+}</code></pre>
+<p>Route gives the prefix. HttpGet adds an HTTP verb and suffix. The long route constraint expects a whole-number ID. GET /api/equipment/1 runs Get with id=1. CancellationToken allows a cancelled request to stop cancellable database work. Ok produces HTTP 200 with JSON. Task&lt;IActionResult&gt; means the method asynchronously returns an HTTP result.</p>
+<p>For POST /api/equipment, ASP.NET deserializes the JSON body into CreateEquipmentRequest, validates supported metadata, and invokes the controller. The controller calls the service. The service validates and inserts using the context. The controller returns CreatedAtAction, which provides status 201 and a URL for the new record.</p>
+<div class="table-row"><span>HTTP result</span><span>Meaning here</span></div>
+<div class="table-row"><span>200</span><span>Successful read/update/action, including a reserve retry that still reports escalation</span></div>
+<div class="table-row"><span>201</span><span>New equipment, backup request, or maintenance ticket created</span></div>
+<div class="table-row"><span>204</span><span>Successful operation with no response body, such as equipment soft delete</span></div>
+<div class="table-row"><span>400</span><span>Invalid input or reference</span></div>
+<div class="table-row"><span>403</span><span>Supplied backup actor is neither requester nor admin</span></div>
+<div class="table-row"><span>404</span><span>Requested record not found</span></div>
+<div class="table-row"><span>409</span><span>Duplicate or invalid state transition, occupied item restriction, or version conflict</span></div>
+<div class="table-row"><span>500</span><span>Unexpected server error; inspect the backend log</span></div>
+<p>ServiceExceptionHandler maps known service errors, database uniqueness errors, and foreign-key errors to Problem Details. It does not convert every unexpected exception into a business error. Some older controllers return simpler error bodies.</p>
+<p>There is currently no authentication/login. Checking a supplied PerformedBy against the requester/admin record is not proof of identity: a caller can submit another ID. When adding login, derive the actor from authenticated claims and enforce authorization. This is a current application limitation, not a completed security feature.</p>
+<h2>17. Complete manual API reference</h2>
+<p>Start with dotnet run and open http://localhost:5080/swagger. Expand an operation, click Try it out, enter fields, then Execute. POST/PUT/PATCH JSON uses Content-Type: application/json. Replace IDs with your actual reference and response values; new computers can assign different IDs.</p>
+<div class="table-row"><span>Method</span><span>Path</span><span>Purpose/body</span></div>
+<div class="table-row"><span>GET</span><span>/api/reference/equipment-types</span><span>Active types</span></div>
+<div class="table-row"><span>GET</span><span>/api/reference/locations</span><span>Active locations; inspect IsCentralWarehouse</span></div>
+<div class="table-row"><span>GET</span><span>/api/reference/users</span><span>Active users</span></div>
+<div class="table-row"><span>GET</span><span>/api/equipment</span><span>Equipment filters and pagination</span></div>
+<div class="table-row"><span>GET</span><span>/api/equipment/{id}</span><span>One item plus availability</span></div>
+<div class="table-row"><span>POST</span><span>/api/equipment</span><span>CreateEquipmentRequest</span></div>
+<div class="table-row"><span>PUT</span><span>/api/equipment/{id}</span><span>UpdateEquipmentRequest</span></div>
+<div class="table-row"><span>DELETE</span><span>/api/equipment/{id}</span><span>Soft delete</span></div>
+<div class="table-row"><span>POST</span><span>/api/equipment/{id}/technicians</span><span>UserId</span></div>
+<div class="table-row"><span>POST</span><span>/api/equipment/{id}/approvers</span><span>UserId</span></div>
+<div class="table-row"><span>GET</span><span>/api/backup-requests</span><span>Request filters and pagination</span></div>
+<div class="table-row"><span>GET</span><span>/api/backup-requests/{id}</span><span>Details, current allocation, history, escalations</span></div>
+<div class="table-row"><span>GET</span><span>/api/backup-requests/{id}/reservation</span><span>Same detail response for reservation page</span></div>
+<div class="table-row"><span>POST</span><span>/api/backup-requests</span><span>Create and attempt allocation</span></div>
+<div class="table-row"><span>POST</span><span>/api/backup-requests/{id}/reserve</span><span>PerformedBy; retry</span></div>
+<div class="table-row"><span>POST</span><span>/api/backup-requests/{id}/allocations/{allocationId}/pickup</span><span>PerformedBy</span></div>
+<div class="table-row"><span>POST</span><span>/api/backup-requests/{id}/allocations/{allocationId}/return</span><span>PerformedBy</span></div>
+<div class="table-row"><span>POST</span><span>/api/backup-requests/{id}/cancel</span><span>PerformedBy and Reason</span></div>
+<div class="table-row"><span>GET</span><span>/api/backup-requests/escalations</span><span>unresolvedOnly, page, pageSize</span></div>
+<div class="table-row"><span>GET</span><span>/api/tickets</span><span>List maintenance tickets</span></div>
+<div class="table-row"><span>GET</span><span>/api/tickets/{id}</span><span>Ticket details</span></div>
+<div class="table-row"><span>POST</span><span>/api/tickets</span><span>Create maintenance ticket</span></div>
+<div class="table-row"><span>PATCH</span><span>/api/tickets/{id}/status</span><span>Status, PerformedBy, Remarks, VersionNumber</span></div>
+<div class="table-row"><span>GET</span><span>/api/tickets/{id}/history</span><span>Recorded actions</span></div>
+<div class="table-row"><span>GET</span><span>/api/maintenance-schedules</span><span>List schedules</span></div>
+<div class="table-row"><span>POST</span><span>/api/maintenance-schedules</span><span>Create schedule</span></div>
+<p>These are 26 method/path combinations. There are no generic create/update/delete reference-data APIs, upload APIs, or standalone notification/audit APIs in the current controllers.</p>
+<p>Create equipment:</p>
+<pre><code>POST /api/equipment</code></pre>
+<pre><code>{
+  &quot;equipmentCode&quot;: &quot;MANUAL-VENT-001&quot;,
+  &quot;name&quot;: &quot;Manual Ventilator&quot;,
+  &quot;equipmentTypeId&quot;: 1,
+  &quot;locationId&quot;: 3,
+  &quot;serialNumber&quot;: &quot;MANUAL-SN-001&quot;,
+  &quot;manufacturer&quot;: &quot;Demo&quot;,
+  &quot;modelNumber&quot;: &quot;V100&quot;,
+  &quot;purchaseDate&quot;: &quot;2026-09-15&quot;,
+  &quot;createdBy&quot;: 1
+}</code></pre>
+<p>Update equipment uses the same editable descriptive fields, type and location, but replaces createdBy with updatedBy, includes isActive, and omits equipmentCode:</p>
+<pre><code>{
+  &quot;name&quot;: &quot;Updated Ventilator&quot;,
+  &quot;equipmentTypeId&quot;: 1,
+  &quot;locationId&quot;: 3,
+  &quot;serialNumber&quot;: &quot;MANUAL-SN-001&quot;,
+  &quot;manufacturer&quot;: &quot;Demo&quot;,
+  &quot;modelNumber&quot;: &quot;V200&quot;,
+  &quot;purchaseDate&quot;: &quot;2026-09-15&quot;,
+  &quot;isActive&quot;: true,
+  &quot;updatedBy&quot;: 1
+}</code></pre>
+<p>Technician and approver assignment bodies are <code>{ &quot;userId&quot;: 2 }</code>, with the appropriate user&#x27;s ID.</p>
+<pre><code>GET /api/equipment?equipmentTypeId=1&amp;isCentralWarehouse=true&amp;availability=available&amp;page=1&amp;pageSize=10
+GET /api/equipment?search=SAMPLE-&amp;pageSize=100
+GET /api/equipment?isActive=false</code></pre>
+<p>Equipment filters: search, equipmentTypeId, locationId, isCentralWarehouse, isActive, availability, page, pageSize. Availability values: available, reserved, in_use, inactive.</p>
+<p>Create a backup request:</p>
+<pre><code>{
+  &quot;requestedWard&quot;: &quot;ICU&quot;,
+  &quot;requestedBy&quot;: 2,
+  &quot;equipmentTypeId&quot;: 1,
+  &quot;bedNumber&quot;: &quot;ICU-B12&quot;,
+  &quot;requestedEquipmentId&quot;: null,
+  &quot;quantity&quot;: 1,
+  &quot;priority&quot;: &quot;high&quot;,
+  &quot;reason&quot;: &quot;Temporary replacement&quot;
+}</code></pre>
+<p>Priority values are low, medium, high, critical. RequestedEquipmentId may be omitted; if present and valid it is a preference. After creation, save request.id and reservation.allocation.id, not just equipment.id. When escalated, reservation is null and there is no current allocation ID to pick up.</p>
+<p>Reserve/pickup/return body:</p>
+<pre><code>{ &quot;performedBy&quot;: 2 }</code></pre>
+<p>Cancel body:</p>
+<pre><code>{ &quot;performedBy&quot;: 2, &quot;reason&quot;: &quot;No longer needed&quot; }</code></pre>
+<p>Request filters: requestedBy, requestedWard, equipmentTypeId, status, bedNumber, page, pageSize. Example: GET /api/backup-requests?requestedBy=2&amp;status=reserved&amp;page=1&amp;pageSize=10. Escalations default to unresolvedOnly=true; use false to include resolved history.</p>
+<p>Create maintenance ticket:</p>
+<pre><code>{
+  &quot;equipmentId&quot;: 1,
+  &quot;createdById&quot;: 1,
+  &quot;title&quot;: &quot;Preventive inspection&quot;,
+  &quot;description&quot;: &quot;Check equipment operation&quot;,
+  &quot;priority&quot;: &quot;medium&quot;,
+  &quot;dueDate&quot;: &quot;2026-09-30&quot;
+}</code></pre>
+<p>Ticket creation consults AssignmentService. It counts active maintenance workload for equipment-linked technicians/approvers and picks the least loaded, breaking ties by user ID. If no candidate exists, the assignment stays null. The existing candidate query filters active assignment links; it does not itself also filter User.IsActive. Automatic reassignment and a complete approval policy are not implemented.</p>
+<p>Change ticket status using the latest VersionNumber returned by the API:</p>
+<pre><code>{
+  &quot;status&quot;: &quot;in_progress&quot;,
+  &quot;performedBy&quot;: 2,
+  &quot;remarks&quot;: &quot;Inspection started&quot;,
+  &quot;versionNumber&quot;: 1
+}</code></pre>
+<p>Possible ticket statuses: open, in_progress, pending_approval, approved, rejected, completed, overdue, cancelled. The controller increments VersionNumber and appends TicketHistory. A stale version returns 409. It currently allows status changes without enforcing a full transition or role matrix.</p>
+<p>Create maintenance schedule:</p>
+<pre><code>{
+  &quot;equipmentId&quot;: 1,
+  &quot;ticketId&quot;: null,
+  &quot;dueDate&quot;: &quot;2026-09-30&quot;,
+  &quot;scheduleType&quot;: &quot;preventive_maintenance&quot;,
+  &quot;isCompleted&quot;: false,
+  &quot;createdBy&quot;: 1,
+  &quot;updatedBy&quot;: null
+}</code></pre>
+<p>The schedule controller currently accepts the entity and stores it; it is a simple scaffold. A schedule is not yet a background job that automatically creates tickets when due.</p>
+<h2>18. Populate data and inspect PostgreSQL yourself</h2>
+<p>There are three separate kinds of initialization:</p>
+<div class="table-row"><span>Mechanism</span><span>What it does</span></div>
+<div class="table-row"><span>Migrations</span><span>Create/change tables, keys, columns and indexes; the workflow migration also transforms legacy data</span></div>
+<div class="table-row"><span>DbSeeder.SeedAsync</span><span>Adds initial users, standard types and locations when their collections are empty; adds central warehouse by code if missing</span></div>
+<div class="table-row"><span>Populate-Equipment.ps1</span><span>Explicitly inserts labeled sample inventory, not run automatically at app startup</span></div>
+<p>After the API has started once to seed references, run from the project root:</p>
+<pre><code>.\scripts\Populate-Equipment.ps1</code></pre>
+<p>This script reads the application connection and invokes psql on Data/sample-equipment.sql. It creates three items for each of seven standard types, 21 total. It finds type/location IDs by code and uses stable SAMPLE- equipment codes. ON CONFLICT DO NOTHING skips those codes on repeat runs, including soft-deleted rows; it does not reset reservations or overwrite existing equipment. The previously inserted two demo ventilators use a separate demo type and are not part of these 21 items.</p>
+<p>If PostgreSQL is installed at another path, pass -PsqlPath. If using pgAdmin instead, select the application database, open Query Tool, load Data/sample-equipment.sql and execute it. Do not run PostgreSQL SQL directly as a PowerShell command; SQL belongs in pgAdmin Query Tool or psql.</p>
+<p>For ordinary real inventory, use POST /api/equipment so service validation runs. Use unique equipment codes and actual reference IDs. New active items with no allocation are available automatically.</p>
+<p>Read-only SQL examples for pgAdmin:</p>
+<pre><code>SELECT &quot;Id&quot;, &quot;EquipmentCode&quot;, &quot;Name&quot;, &quot;EquipmentTypeId&quot;, &quot;LocationId&quot;, &quot;IsActive&quot;
+FROM equipment ORDER BY &quot;Id&quot;;
+
+SELECT e.&quot;Id&quot;, e.&quot;EquipmentCode&quot;, t.&quot;TypeName&quot;, l.&quot;Name&quot; AS &quot;HomeLocation&quot;
+FROM equipment e
+JOIN equipment_types t ON t.&quot;Id&quot; = e.&quot;EquipmentTypeId&quot;
+JOIN locations l ON l.&quot;Id&quot; = e.&quot;LocationId&quot;
+ORDER BY e.&quot;Id&quot;;
+
+SELECT &quot;Id&quot;, &quot;RequestId&quot;, &quot;EquipmentId&quot;, &quot;Status&quot;, &quot;ReservationExpiresAt&quot;
+FROM backup_allocations ORDER BY &quot;Id&quot; DESC;
+
+SELECT &quot;MigrationId&quot;, &quot;ProductVersion&quot; FROM &quot;__EFMigrationsHistory&quot;;</code></pre>
+<p>The quotes matter. This project maps table names to lowercase but column names retain PascalCase, such as &quot;EquipmentTypeId&quot;. PostgreSQL folds unquoted identifiers to lowercase, so unquoted EquipmentTypeId is not the same identifier as &quot;EquipmentTypeId&quot;.</p>
+<p>SQL availability is a derived concept here. Do not look for equipment.Status or change an allocation manually to “available.” Use the return/cancel endpoints to preserve the related request state and history.</p>
+<h2>19. Develop a new feature without an assistant</h2>
+<p>Use this order: business requirement, entity/storage design, DTO, mapping, service, controller, registration, migration if needed, and tests. You do not need a migration for changes that only alter selection logic, validation, or HTTP routing without changing the mapped database model.</p>
+<p>Exercise: add an optional AssetTag to equipment. Do this only when you want that feature; the guide does not apply it automatically.</p>
+<p>Step 1: define the rule. An equipment item may have an asset tag of at most 80 characters. Existing equipment may have none. Decide whether tags must be unique before adding an index.</p>
+<p>Step 2: add to the Equipment class in Models/CoreModels.cs:</p>
+<pre><code>[MaxLength(80)] public string? AssetTag { get; set; }</code></pre>
+<p>Step 3: append an optional parameter to both equipment request records, after their current parameters:</p>
+<pre><code>string? AssetTag = null</code></pre>
+<p>Do not paste that as a standalone line in the file; add it inside each record&#x27;s parameter list with the preceding comma. Keeping it optional at the end preserves existing positional callers, including your tests.</p>
+<p>Step 4: in EquipmentService.CreateAsync, validate that request.AssetTag is at most 80 characters before creating the entity. Assign AssetTag = request.AssetTag in the object initializer. In UpdateAsync, perform the same length validation and assign equipment.AssetTag = request.AssetTag. A simple guard is:</p>
+<pre><code>if (request.AssetTag?.Length &gt; 80)
+    throw new ServiceException(400, &quot;Asset tag must be at most 80 characters.&quot;);</code></pre>
+<p>Step 5: EquipmentView already returns the Equipment object, so the new public field will appear in that wrapped JSON without changing its constructor. If you later use a flattened DTO, explicitly map the new field there. No extra DbSet is needed because you are extending Equipment rather than introducing a new entity.</p>
+<p>Step 6: stop any running executable that blocks compilation. Generate the change:</p>
+<pre><code>dotnet build
+dotnet ef migrations add AddEquipmentAssetTag</code></pre>
+<p>Step 7: inspect the generated migration. Expect one nullable character-varying column on equipment with length 80. If it proposes dropping unrelated tables/columns, investigate before applying it. Save a database backup before schema changes to important data.</p>
+<p>Step 8: apply and verify:</p>
+<pre><code>dotnet ef database update
+dotnet ef migrations has-pending-model-changes
+dotnet run</code></pre>
+<p>Step 9: create/edit an item with assetTag in Swagger, fetch it, and check the column in pgAdmin. Test an 81-character value and an omitted/null value. Existing rows should have null, not disappear. Commit the entity, DTO, service, migration, Designer and snapshot changes together.</p>
+<p>For a completely new entity, also add its DbSet and mapping rules, define references and delete behavior, implement service methods, add controller routes and register the service. New endpoints should call services; avoid copying database/business logic into each controller. If a new operation changes inventory availability, preserve the inventory transaction and unique-index invariants.</p>
+<p>To recreate a small learning version from an empty folder rather than opening this project, begin with:</p>
+<pre><code>dotnet new webapi --use-controllers --framework net8.0 -n EquipmentLearning
+cd EquipmentLearning
+dotnet add package Microsoft.EntityFrameworkCore --version 8.0.31
+dotnet add package Microsoft.EntityFrameworkCore.Relational --version 8.0.31
+dotnet add package Microsoft.EntityFrameworkCore.Design --version 8.0.31
+dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL --version 8.0.11
+dotnet add package Swashbuckle.AspNetCore --version 8.0.0
+dotnet new tool-manifest
+dotnet tool install dotnet-ef --version 8.0.31</code></pre>
+<p>Run that learning project against a separate database such as equipment_learning. Add EquipmentType, Location and Equipment first, then the context, connection, service and controller; generate its own initial migration. Add backup requests and allocations only after basic CRUD works. Do not generate a second unrelated initial migration against the existing equipment_management database.</p>
+<h2>20. Move to another IDE or computer, including your data</h2>
+<p>Same computer, different IDE: open the project folder or .csproj in the other editor, open a terminal in that folder, and use dotnet build/run. PostgreSQL continues running independently. You do not need to recreate the database. Avoid two API processes trying to bind the same port.</p>
+<p>Different computer: copy the source and migration files, install the SDK/database tools, restore packages/tools, and configure the new database connection. Choose one data strategy: start fresh using migrations and seeds, or restore a database backup with existing rows.</p>
+<p>For a fresh database, follow section 4. IDs may differ from earlier demonstrations. Use the reference endpoints rather than assuming type 8 or user 4 exists.</p>
+<p>For existing data, use pg_dump. These Windows examples assume PostgreSQL tools are installed at the shown path; replace the path on the destination if needed. The commands prompt for your PostgreSQL password.</p>
+<p>On the source computer:</p>
+<pre><code>&amp; &#x27;C:\Program Files\PostgreSQL\18\bin\pg_dump.exe&#x27; -h localhost -p 5432 -U postgres -W -Fc -f equipment_management.backup equipment_management</code></pre>
+<p>Copy equipment_management.backup securely. It contains your database records. On the destination, create a NEW empty database to restore into:</p>
+<pre><code>&amp; &#x27;C:\Program Files\PostgreSQL\18\bin\createdb.exe&#x27; -h localhost -p 5432 -U postgres -W equipment_management_copy
+&amp; &#x27;C:\Program Files\PostgreSQL\18\bin\pg_restore.exe&#x27; -h localhost -p 5432 -U postgres -W --no-owner --no-privileges --exit-on-error -d equipment_management_copy equipment_management.backup</code></pre>
+<p>Point the copied application at equipment_management_copy, then run dotnet ef migrations list and dotnet run. Do not create tables through migrations before restoring into that empty destination: the backup already includes schema and migration history. Restore into a new database avoids overwriting an existing application database.</p>
+<p>Use compatible PostgreSQL versions and tools; matching version 18 to the original local installation is straightforward. pg_dump backs up one database, not every server login/role. The example restores ownership to the destination account with --no-owner. See PostgreSQL&#x27;s <a href="https://www.postgresql.org/docs/18/app-pgdump.html">pg_dump documentation</a> for supported formats and options.</p>
+<p>The optional docker-compose.yml starts another PostgreSQL server, not a view of your locally installed server. It uses port 5432 by default, so do not start it on that port while local PostgreSQL already occupies it. A database inside Docker has separate storage from your Windows-installed database.</p>
+<h2>21. Test and debug independently</h2>
+<p>A successful build proves the code compiles; it does not prove the password works, SQL queries translate, HTTP DTOs bind, or two users cannot double-book. Use layers of verification.</p>
+<p>First run dotnet build. Then inspect migrations and call simple GET APIs. Next test create/edit/delete and invalid data. Finally test workflow sequences and simultaneous callers against PostgreSQL.</p>
+<p>The Tests project is a console-based integration harness with assertions, not an xUnit/MSTest suite. Run it with dotnet run, not just dotnet test. Its normal mode creates a random schema in a dedicated test database and removes that schema in finally. It tests real PostgreSQL transactions and a controllable clock. Its earlier verified suite contained 43 checks, including migration compatibility, fallback allocation, exact expiry, and unique-index enforcement.</p>
+<p>With Docker installed and running, an isolated test setup is:</p>
+<pre><code>docker run --detach --rm --name equipment-reservation-tests -e POSTGRES_PASSWORD=reservation_test_only -e POSTGRES_DB=reservation_tests -p 127.0.0.1:55438:5432 postgres:16
+docker exec equipment-reservation-tests pg_isready -U postgres -d reservation_tests
+dotnet run --project Tests/EquipmentManagementBackend.IntegrationTests.csproj --configuration Release
+docker stop equipment-reservation-tests</code></pre>
+<p>Wait until pg_isready reports ready before running the suite. If using local PostgreSQL instead, create a dedicated test database and set TEST_DATABASE_CONNECTION in your terminal to its connection string. Do not point ordinary integration tests at important application data. The sample test password above is only for the disposable test container.</p>
+<p>The explicit --seed-local-demo mode is different: it reads your application file connection and retains labeled demo records/history. It performed ten local checks in this project. It simulates expiry by moving only its demo allocation&#x27;s timestamps into the past; it does not literally wait twenty minutes. Use the normal sample equipment population script when you only want inventory, rather than a workflow demonstration.</p>
+<p>Tests/HttpSmoke.ps1 exercises an already running isolated test API. It creates test records, so use it deliberately against a test instance. The default URL is http://127.0.0.1:5089. It checks Swagger, HTTP validation, CRUD, and workflow routes. Real HTTP checks previously caught a record-annotation problem that direct service calls could not detect.</p>
+<p>To debug in any IDE, set breakpoints in this order: controller action, service method, and the line before SaveChangesAsync. Send one Swagger request. Inspect the DTO, selected item, current status and IDs. Step through the call chain. Use PostgreSQL read queries from section 18 to verify committed rows afterward.</p>
+<h2>22. Troubleshooting table</h2>
+<div class="table-row"><span>Symptom</span><span>What to inspect</span><span>Practical next step</span></div>
+<div class="table-row"><span>dotnet command not found</span><span>SDK installation and PATH</span><span>Install the SDK, reopen terminal, run dotnet --list-sdks</span></div>
+<div class="table-row"><span>Compatible SDK not found</span><span>global.json versus installed SDKs</span><span>Install a .NET 8 SDK rather than deleting version constraints blindly</span></div>
+<div class="table-row"><span>dotnet ef not found</span><span>Local tool manifest and restore</span><span>Run dotnet tool restore in the project folder</span></div>
+<div class="table-row"><span>NuGet restore fails</span><span>Network, proxy, package source</span><span>Read the first restore error; reconnect/configure access</span></div>
+<div class="table-row"><span>Password authentication failed</span><span>PostgreSQL login, saved file, environment override</span><span>Confirm password in pgAdmin; save settings; rerun without --no-build</span></div>
+<div class="table-row"><span>Database does not exist</span><span>Database name or create permission</span><span>Create an empty target database or allow migration creation</span></div>
+<div class="table-row"><span>Connection refused</span><span>PostgreSQL service, host, port</span><span>Start/check the server and configured port</span></div>
+<div class="table-row"><span>Address already in use</span><span>API port or Docker/database port</span><span>Stop your duplicate process or choose a different port</span></div>
+<div class="table-row"><span>Column does not exist</span><span>Model/schema mismatch</span><span>Check pending migrations and correct connection target</span></div>
+<div class="table-row"><span>Relation already exists during initial migration</span><span>Old EnsureCreated schema or wrong migration history</span><span>Investigate legacy baseline procedure; do not drop tables blindly</span></div>
+<div class="table-row"><span>File locked during build</span><span>Running/debugging application</span><span>Stop its process or use a separate Release build for tests</span></div>
+<div class="table-row"><span>Could not translate LINQ</span><span>Expression is not supported as SQL</span><span>Simplify query/projection and verify with actual PostgreSQL</span></div>
+<div class="table-row"><span>Invalid active type/location/user</span><span>Supplied foreign ID</span><span>Use reference endpoints and select active records</span></div>
+<div class="table-row"><span>Duplicate code / 409</span><span>Unique constraint</span><span>Use a new code; do not reset existing records to seed data</span></div>
+<div class="table-row"><span>Pickup returns 409</span><span>Deadline or allocation state</span><span>Refresh details, retry reserve if appropriate, use new allocation ID</span></div>
+<div class="table-row"><span>Unexpected shortage</span><span>Type, warehouse flag, active flags, allocations</span><span>Check every candidate condition, not just total equipment count</span></div>
+<div class="table-row"><span>Swagger missing</span><span>Development environment and URL</span><span>Use the supplied launch profile; inspect terminal address</span></div>
+<div class="table-row"><span>HTTPS port warning in local HTTP test</span><span>HTTPS redirection configuration</span><span>The supplied profile is HTTP; configure HTTPS explicitly when needed</span></div>
+<div class="table-row"><span>Windows event-log access error</span><span>Process permissions/logging environment</span><span>Run with appropriate local permissions or configure an accessible logging provider</span></div>
+<div class="table-row"><span>Enum value cannot be read</span><span>Renamed enum strings in existing data</span><span>Add a deliberate data migration for the stored values</span></div>
+<p>When using --no-build, old compiled code or copied configuration may be used. After changing code or configuration, rebuild. In the earlier connection setup, rebuilding was necessary to pick up the saved password change in the migration execution path.</p>
+<h2>23. What was built and what you should learn next</h2>
+<p>The work completed in this project included installing and selecting .NET 8, aligning EF packages, moving equipment CRUD into a service, adding filter/pagination responses, implementing the backup reservation lifecycle, preventing duplicate active assignments, adding fallback selection for an occupied preferred item, adding expiry and escalation handling, replacing EnsureCreated with migrations, connecting local PostgreSQL, and adding sample data/scripts and real database/HTTP verification.</p>
+<p>The database on the original computer was created through the two migrations and seeded with references. Two separate demo items were inserted for workflow verification, then 21 stable SAMPLE- items were added. These are previous results, not a promise that a copied/new database already has those rows. Always query the destination database.</p>
+<p>The current scope is a working development backend. Important future work includes authenticated identities, authorization, stronger validation and service separation for the older controllers, production migration/deployment practices, audit/event delivery, and any intended delivery/receipt or scheduled-maintenance automation. There is no frontend included. A frontend running on another origin may also require deliberate CORS configuration, which is not currently added in Program.cs.</p>
+<p>Suggested learning order:</p>
+<p>1. Run the existing app and read one equipment record in Swagger and pgAdmin.</p>
+<p>2. Learn C# classes, properties, nullable values, methods and async/await using these files.</p>
+<p>3. Create an item with the API and follow it into PostgreSQL.</p>
+<p>4. Trace a backup request through controller, service, context and allocation rows.</p>
+<p>5. Perform the AssetTag exercise on a development copy/database.</p>
+<p>6. Write a test for the field, including invalid input.</p>
+<p>7. Practice backup/restore into a separate database and run the copied app against it.</p>
+<p>You are ready to extend a feature when you can answer: What data changes? Which service owns the rule? Does it change availability? Which API accepts it? Does it need a migration? How will I test its normal, invalid, and concurrent cases?</p>
+<h2>24. Offline navigation and official references</h2>
+<p>This document is self-contained for the project workflow. Keep it with the source code. Read source files in this order: Models/CoreModels.cs, Models/Enums/DomainEnums.cs, Data/AppDbContext.cs, DTOs/Requests.cs, Services/EquipmentService.cs, Controllers/EquipmentController.cs, Program.cs, then BackupReservationService and the migrations.</p>
+<p>For deeper study when internet is available:</p>
+<p>- ASP.NET Core fundamentals: https://learn.microsoft.com/en-in/aspnet/core/fundamentals/?view=aspnetcore-8.0</p>
+<p>- EF Core migrations: https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/</p>
+<p>- Applying migrations: https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying</p>
+<p>- PostgreSQL beginner tutorial: https://www.postgresql.org/docs/18/tutorial.html</p>
+<p>- PostgreSQL transaction locks: https://www.postgresql.org/docs/18/explicit-locking.html#ADVISORY-LOCKS</p>
+<p>- PostgreSQL backups: https://www.postgresql.org/docs/18/app-pgdump.html</p>
+<p>Treat your actual source files as the authority for application behavior after future edits. Update this guide along with significant model or workflow changes.</p></body></html>

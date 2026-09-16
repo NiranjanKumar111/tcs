@@ -283,6 +283,13 @@ namespace EquipmentManagementBackend.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<DateOnly?>("CalibrationAnchorDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("CalibrationFrequency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -300,8 +307,21 @@ namespace EquipmentManagementBackend.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<DateOnly?>("LastCalibrationDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("LastMaintenanceDate")
+                        .HasColumnType("date");
+
                     b.Property<long>("LocationId")
                         .HasColumnType("bigint");
+
+                    b.Property<DateOnly?>("MaintenanceAnchorDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("MaintenanceFrequency")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Manufacturer")
                         .HasMaxLength(120)
@@ -315,6 +335,12 @@ namespace EquipmentManagementBackend.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly?>("NextCalibrationDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("NextMaintenanceDate")
+                        .HasColumnType("date");
 
                     b.Property<DateOnly?>("PurchaseDate")
                         .HasColumnType("date");
@@ -339,6 +365,10 @@ namespace EquipmentManagementBackend.Migrations
                     b.HasIndex("EquipmentTypeId");
 
                     b.HasIndex("LocationId");
+
+                    b.HasIndex("NextCalibrationDate");
+
+                    b.HasIndex("NextMaintenanceDate");
 
                     b.HasIndex("UpdatedBy");
 
@@ -451,6 +481,11 @@ namespace EquipmentManagementBackend.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("Building")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -461,6 +496,11 @@ namespace EquipmentManagementBackend.Migrations
 
                     b.Property<long?>("CreatedBy")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("Floor")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -473,11 +513,23 @@ namespace EquipmentManagementBackend.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("Room")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("Shelf")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<long?>("UpdatedBy")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("Ward")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -597,6 +649,9 @@ namespace EquipmentManagementBackend.Migrations
                     b.Property<long?>("AssignedTo")
                         .HasColumnType("bigint");
 
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -616,14 +671,24 @@ namespace EquipmentManagementBackend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("TicketNumber")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("TicketType")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -636,6 +701,12 @@ namespace EquipmentManagementBackend.Migrations
                     b.Property<int>("VersionNumber")
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("WorkCompletedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("WorkReport")
+                        .HasColumnType("text");
 
                     b.HasKey("TicketId");
 
@@ -654,7 +725,117 @@ namespace EquipmentManagementBackend.Migrations
 
                     b.HasIndex("Status", "Priority", "CreatedAt");
 
+                    b.HasIndex("TicketType", "Status", "CreatedAt");
+
                     b.ToTable("tickets", (string)null);
+                });
+
+            modelBuilder.Entity("EquipmentManagementBackend.Models.TicketCalibrationResult", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Maximum")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Measured")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Minimum")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Parameter")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<bool>("Passed")
+                        .HasColumnType("boolean");
+
+                    b.Property<long>("TicketId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketId");
+
+                    b.ToTable("ticket_calibration_results", (string)null);
+                });
+
+            modelBuilder.Entity("EquipmentManagementBackend.Models.TicketComplianceItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("Passed")
+                        .HasColumnType("boolean");
+
+                    b.Property<long>("TicketId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketId");
+
+                    b.ToTable("ticket_compliance_items", (string)null);
+                });
+
+            modelBuilder.Entity("EquipmentManagementBackend.Models.TicketComplianceVerification", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("Approved")
+                        .HasColumnType("boolean");
+
+                    b.Property<long>("ApproverId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<long>("TicketId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("TicketVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApproverId");
+
+                    b.HasIndex("TicketId");
+
+                    b.ToTable("ticket_compliance_verifications", (string)null);
                 });
 
             modelBuilder.Entity("EquipmentManagementBackend.Models.TicketDocument", b =>
@@ -776,6 +957,10 @@ namespace EquipmentManagementBackend.Migrations
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
+
+                    b.Property<string>("PasswordHash")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -1043,6 +1228,39 @@ namespace EquipmentManagementBackend.Migrations
                         .IsRequired();
 
                     b.Navigation("Equipment");
+                });
+
+            modelBuilder.Entity("EquipmentManagementBackend.Models.TicketCalibrationResult", b =>
+                {
+                    b.HasOne("EquipmentManagementBackend.Models.Ticket", null)
+                        .WithMany()
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EquipmentManagementBackend.Models.TicketComplianceItem", b =>
+                {
+                    b.HasOne("EquipmentManagementBackend.Models.Ticket", null)
+                        .WithMany()
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EquipmentManagementBackend.Models.TicketComplianceVerification", b =>
+                {
+                    b.HasOne("EquipmentManagementBackend.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("ApproverId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EquipmentManagementBackend.Models.Ticket", null)
+                        .WithMany()
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("EquipmentManagementBackend.Models.TicketDocument", b =>
