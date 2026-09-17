@@ -87,8 +87,7 @@ moving, deactivating, or changing the type of occupied/open-maintenance equipmen
 9. Admin/approver: view updated compliance (Admin Dashboard KPI 1 / Approver 23). History and audit records remain available.
 
 While the application is running, the scheduler checks every minute and generates preventive and
-calibration tickets when due within two days (including overdue work), using the equipment's assigned
-active technician and approver. Work due three days away is excluded; repeated checks avoid duplicate open tickets.
+calibration tickets when due within two days (including overdue work), using the least-loaded active technician and the equipment's assigned active approver. Work due three days away is excluded; repeated checks avoid duplicate open tickets.
 
 For a calibration ticket, also record parameter/unit/allowed minimum/maximum/measured result when prompted during Update ticket.
 Out-of-range readings prevent submission/approval. Limits are entered with the measurement and
@@ -283,3 +282,32 @@ Approver option **1 Pending approvals** lists all pending tickets assigned to th
 response and evidence. Choose **1 Accept** or **2 Reject**. Rejection requires a reason and returns
  the ticket to its existing technician as rejected for rework and resubmission. Review versions load
  automatically. Options **3 Ticket details/history**, **4 Close approved ticket**, and **5 Change password** remain available.
+
+## Simplified staff and admin ticket menus
+
+Both ticket menus now offer **1 Create ticket** and **2 View ticket history** only.
+Enter equipment ID and ticket type (corrective, preventive or calibration). Priority is medium
+for corrective/preventive and low for calibration. Due date is the UTC registration date plus three
+days. Title and employee assignments are automatic; no description or scheduling inputs are required.
+Staff history shows only their own requests; admin history shows all visible tickets.
+This replaces the earlier admin reassignment menu and staff incident submenu described above.
+
+## Role-based view folders
+
+Views are organized under `ConsoleApp/Views/`:
+
+- `Admin/`: employee, dashboard, audit, exception, reference and equipment-assignment views.
+- `Staff/StaffTicketView.cs`: staff ticket creation inputs and confirmation.
+- `Technician/TechnicianTicketView.cs`: technician response, checklist and calibration inputs.
+- `Approver/ApproverTicketView.cs`: accept/reject inputs and required rejection reason.
+- `Shared/`: reusable ticket, equipment and backup displays, console input/menu helpers and logging.
+
+Controllers still coordinate workflows; services still enforce permissions. Shared views do not grant access.
+View namespaces match these folders: `CriticalCare.ConsoleApp.Views.<Folder>`.
+
+Automatic technician assignment for manual and scheduled tickets chooses the active technician
+with the fewest unresolved tickets (all statuses except completed/cancelled). Ties use the lowest
+employee ID. Equipment technician links do not override workload selection. The selection and ticket
+save use the same inventory transaction lock, so concurrent creation sees committed assignments.
+Explicit service-level assignments and admin reassignment remain supported. With no active technician,
+the ticket remains unassigned for administrator attention. Approver selection is unchanged.

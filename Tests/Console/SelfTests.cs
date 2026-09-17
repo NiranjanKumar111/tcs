@@ -412,6 +412,52 @@ internal static class SelfTests
             await AdminMenuTests.RunAsync(database, auth, admin, staff, Check);
             await EquipmentCreationTests.RunAsync(database, auth, admin, staff, Check);
             await TechnicianDashboardTests.RunAsync(database, auth, admin, Check);
+            foreach (var actor in new[] { admin, staff })
+            {
+                foreach (var kind in Enum.GetValues<TicketType>())
+                {
+                    var id = await maintenance.CreateAsync(actor, equipment, kind);
+                    var created = (await maintenance.DetailAsync(actor, id)).Ticket;
+                    Check(created.Priority == (kind == TicketType.calibration ? TicketPriority.low : TicketPriority.medium) &&
+                        created.DueDate == DateOnly.FromDateTime(created.CreatedAt).AddDays(3),
+                        $"automatic {kind} priority and registration-plus-three-day due date for user {actor.UserId}");
+                }
+                var savedInput = Console.In;
+                var savedOutput = Console.Out;
+                using var menuInput = new StringReader($"1\n{equipment}\ncalibration\n2\n0\n");
+                using var menuOutput = new StringWriter();
+                try
+                {
+                    Console.SetIn(menuInput);
+                    Console.SetOut(menuOutput);
+                    if (actor == admin) await new AdminTicketController(auth, maintenance, employees).RunAsync(actor);
+                    else await new IncidentController(auth, maintenance, reports).RunAsync(actor);
+                }
+                finally
+                {
+                    Console.SetIn(savedInput);
+                    Console.SetOut(savedOutput);
+                }
+                var screen = menuOutput.ToString();
+                Check(screen.Contains("Created ticket") && screen.Contains("2 View ticket history") &&
+                    !screen.Contains("Title:") && !screen.Contains("Description:") && !screen.Contains("Due date:") &&
+                    !screen.Contains("Priority [") && !screen.Contains("Action not completed"),
+                    "simplified ticket menu creates and displays history using only equipment ID and ticket type");
+            }
+            // Predict assignment independently from the service for successive requests.
+            for (var assignmentIndex = 0; assignmentIndex < 6; assignmentIndex++)
+            {
+                long expected;
+                await using (var db = database.Open())
+                {
+                    var active = await db.Users.Where(user => user.IsActive && user.Role == "technician").ToListAsync();
+                    var unresolved = await db.Tickets.Where(ticket => ticket.Status != TicketStatus.completed && ticket.Status != TicketStatus.cancelled).ToListAsync();
+                    expected = active.OrderBy(user => unresolved.Count(ticket => ticket.AssignedTo == user.Id)).ThenBy(user => user.Id).First().Id;
+                }
+                var createdId = await maintenance.CreateAsync(staff, equipment, TicketType.corrective);
+                Check((await maintenance.DetailAsync(admin, createdId)).Ticket.AssignedTo == expected,
+                    "automatic technician assignment uses fewest unresolved tickets with ID tie-break, request " + assignmentIndex);
+            }
             await PasswordChangeTests.RunAsync(database, auth, admin, Check);
             Console.WriteLine($"ALL {checks} CONSOLE POSTGRESQL CHECKS PASSED");
         }

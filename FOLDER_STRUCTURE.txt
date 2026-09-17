@@ -1,0 +1,41 @@
+EquipmentManagementBackend/
+(Folders only; excludes Git metadata, build output, and local backups.)
+
+|-- .config/
+|-- ConsoleApp/
+|   `-- Views/
+|       |-- Admin/
+|       |-- Approver/
+|       |-- Shared/
+|       |-- Staff/
+|       `-- Technician/
+|-- Controllers/
+|-- Data/
+|-- docs/
+|-- DTOs/
+|-- Infrastructure/
+|-- Interfaces/
+|   |-- Controllers/
+|   |-- Repositories/
+|   `-- Services/
+|-- LegacyWeb/
+|   |-- Controllers/
+|   |-- Data/
+|   |-- Properties/
+|   `-- Services/
+|-- Migrations/
+|-- Models/
+|   |-- Authentication/
+|   `-- Enums/
+|-- Properties/
+|-- Repositories/
+|-- scripts/
+|-- Services/
+|   |-- Administration/
+|   |-- Authentication/
+|   |-- Backups/
+|   |-- Inventory/
+|   |-- Maintenance/
+|   `-- Reports/
+`-- Tests/
+    `-- Console/

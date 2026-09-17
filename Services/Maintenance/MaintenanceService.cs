@@ -19,7 +19,16 @@ public sealed class MaintenanceService : IMaintenanceService
     }
 
     private static bool IsTicketOpen(Ticket ticket) => ticket.Status is not (TicketStatus.completed or TicketStatus.cancelled);
-    public async Task<long> CreateAsync(
+    public Task<long> CreateAsync(Session actor, long equipmentId, TicketType type) =>
+        CreateCoreAsync(actor, equipmentId, type,
+            type == TicketType.calibration ? TicketPriority.low : TicketPriority.medium,
+            $"{type} ticket for equipment {equipmentId}", "", default, null, null, true);
+
+    public Task<long> CreateAsync(Session actor, long equipmentId, TicketType type, TicketPriority priority,
+        string title, string description, DateOnly due, long? technician = null, long? approver = null) =>
+        CreateCoreAsync(actor, equipmentId, type, priority, title, description, due, technician, approver, false);
+
+    private async Task<long> CreateCoreAsync(
         Session actor,
         long equipmentId,
         TicketType type,
@@ -28,7 +37,7 @@ public sealed class MaintenanceService : IMaintenanceService
         string description,
         DateOnly due,
         long? technician = null,
-        long? approver = null)
+        long? approver = null, bool automatic = false)
     {
         InputValidation.RequireText(title, 250, "Title");
         if (!Enum.IsDefined(type) || !Enum.IsDefined(priority))
@@ -43,9 +52,9 @@ public sealed class MaintenanceService : IMaintenanceService
             actor,
             "admin",
             "staff");
-        if (user.Role == "staff" && (type != TicketType.corrective || technician != null || approver != null))
+        if (user.Role == "staff" && (technician != null || approver != null))
         {
-            throw new UnauthorizedAccessException("Staff may raise corrective service requests; assignment is automatic.");
+            throw new UnauthorizedAccessException("Staff ticket assignment is automatic.");
         }
 
         if (!await db.Equipment.AnyAsync(x => x.Id == equipmentId && x.IsActive))
@@ -53,10 +62,6 @@ public sealed class MaintenanceService : IMaintenanceService
             throw new ArgumentException("Active equipment not found.");
         }
 
-        technician ??= await (from link in db.EquipmentTechnicians
-            join employee in db.Users on link.TechnicianId equals employee.Id
-            where link.EquipmentId == equipmentId && link.IsActive && employee.IsActive && employee.Role == "technician"
-            orderby employee.Id select (long?)employee.Id).FirstOrDefaultAsync();
         technician ??= await LeastLoadedAsync(db, "technician");
         approver ??= await (from link in db.EquipmentApprovers
             join employee in db.Users on link.ApproverId equals employee.Id
@@ -65,6 +70,7 @@ public sealed class MaintenanceService : IMaintenanceService
         approver ??= await LeastLoadedAsync(db, "approver");
         await ValidateAssigneeAsync(db, technician, "technician");
         await ValidateAssigneeAsync(db, approver, "approver");
+        var registeredAt = DateTime.UtcNow;
         var ticket = new Ticket
         {
             EquipmentId = equipmentId,
@@ -73,7 +79,8 @@ public sealed class MaintenanceService : IMaintenanceService
             Priority = priority,
             Title = title.Trim(),
             Description = description,
-            DueDate = due,
+            CreatedAt = registeredAt,
+            DueDate = automatic ? DateOnly.FromDateTime(registeredAt).AddDays(3) : due,
             AssignedTo = technician,
             ApproverId = approver,
             TicketNumber = "TKT-" + Guid.NewGuid().ToString("N")
@@ -447,7 +454,9 @@ public sealed class MaintenanceService : IMaintenanceService
             history,
             checklist,
             readings,
-            reviews);
+            reviews,
+            await db.Users.Where(user => user.Id == ticket.AssignedTo).Select(user => user.Name).SingleOrDefaultAsync(),
+            await db.Users.Where(user => user.Id == ticket.ApproverId).Select(user => user.Name).SingleOrDefaultAsync());
     }
 
     private static IQueryable<Ticket> GetVisibleTickets(IUnitOfWork db, User user) => user.Role switch
@@ -532,5 +541,5 @@ public sealed class MaintenanceService : IMaintenanceService
         }
     }
 
-    private static Task<long?> LeastLoadedAsync(IUnitOfWork db, string role) => db.Users.Where(x => x.IsActive && x.Role == role).OrderBy(x => db.Tickets.Count(t => (role == "technician" ? t.AssignedTo == x.Id : t.ApproverId == x.Id) && t.Status != TicketStatus.completed && t.Status != TicketStatus.cancelled)).ThenBy(x => x.Id).Select(x => (long? )x.Id).FirstOrDefaultAsync();
+    internal static Task<long?> LeastLoadedAsync(IUnitOfWork db, string role) => db.Users.Where(x => x.IsActive && x.Role == role).OrderBy(x => db.Tickets.Count(t => (role == "technician" ? t.AssignedTo == x.Id : t.ApproverId == x.Id) && t.Status != TicketStatus.completed && t.Status != TicketStatus.cancelled)).ThenBy(x => x.Id).Select(x => (long? )x.Id).FirstOrDefaultAsync();
 }

@@ -9,4 +9,6 @@ public record TicketDetails(
     IReadOnlyList<TicketHistory> History,
     IReadOnlyList<TicketComplianceItem> Checklist,
     IReadOnlyList<TicketCalibrationResult> Readings,
-    IReadOnlyList<TicketComplianceVerification> Reviews);
+    IReadOnlyList<TicketComplianceVerification> Reviews,
+    string? TechnicianName = null,
+    string? ApproverName = null);

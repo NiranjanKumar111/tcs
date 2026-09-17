@@ -85,7 +85,7 @@ public sealed class SchedulingService : ISchedulingService
                     Title = $"Scheduled {type}: {item.Name}",
                     Description = $"Generated from {frequency} frequency; due {due:yyyy-MM-dd}.",
                     DueDate = due.Value,
-                    AssignedTo = await Assign("technician"),
+                    AssignedTo = await MaintenanceService.LeastLoadedAsync(db, "technician"),
                     ApproverId = await Assign("approver"),
                     Priority = due < today ? TicketPriority.high : TicketPriority.medium
 

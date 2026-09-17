@@ -1,0 +1,155 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Equipment Backend — Beginner Guide</title>
+<style>body{font:17px/1.65 system-ui,sans-serif;color:#17293b;max-width:1000px;margin:40px auto;padding:0 25px}
+h1{font-size:34px}h2{margin-top:48px;border-bottom:2px solid #c8dae9;padding-bottom:10px}
+pre{background:#eff4f8;padding:18px;overflow:auto;font-size:13px;line-height:1.5;white-space:pre-wrap}
+code{font-family:Consolas,monospace}.table-row{display:flex;border-bottom:1px solid #ccd8e2;font-size:14px}
+.table-row span{flex:1;padding:8px;overflow-wrap:anywhere}a{color:#1268a1}
+@media print{body{font-size:10pt;margin:0;max-width:none}h2{break-after:avoid}pre{font-size:8pt}a{color:inherit}}
+</style><body><p>Offline edition. Use your browser's Print → Save as PDF to create a PDF copy.</p><h1>How to change this console application</h1>
+<p>A practical guide in simple words. Paths are relative to the folder containing Program.cs and EquipmentManagementBackend.csproj. Examples are instructions for future development; they are not already-added features.</p>
+<h2>1. Understand the five places involved</h2>
+<p>A screen is not stored in one file. Its menu, printed text, rules and stored data have different owners.</p>
+<p>1. Controller: chooses what happens after an option is selected. Look in Controllers/.</p>
+<p>2. View: prints information and reads reusable input. Look in ConsoleApp/Views/.</p>
+<p>3. Service: checks who can perform the action, validates it and changes or reads data. Look in Services/.</p>
+<p>4. Model and database configuration: describe stored data. Look in Models/ and Data/AppDbContext.cs.</p>
+<p>5. Program.cs: creates services/controllers and connects them.</p>
+<p>An interface is the list of operations a service promises to provide. For example, IMaintenanceService declares ReviewAsync, and MaintenanceService contains the actual review code. A DTO is a small object used to carry inputs or results. A migration describes how an existing database should change.</p>
+<p>Start at the screen&#x27;s controller. Follow its service call. Do not start by changing the database for a simple label change.</p>
+<h2>2. Find the exact component</h2>
+<div class="table-row"><span>What you want to change</span><span>Start here</span><span>Related rules/output</span></div>
+<div class="table-row"><span>Login or first administrator setup</span><span>Controllers/ApplicationController.cs</span><span>Services/Authentication/AuthenticationService.cs</span></div>
+<div class="table-row"><span>Password change prompts</span><span>Controllers/MenuController.cs: ChangePasswordAsync</span><span>AuthenticationService.ChangePasswordAsync; IAuthenticationService</span></div>
+<div class="table-row"><span>Admin main options</span><span>Controllers/AdminController.cs: RunAsync</span><span>Program.cs for new dependencies</span></div>
+<div class="table-row"><span>Employee menu/actions</span><span>Controllers/EmployeeController.cs</span><span>Services/Administration/EmployeeService.cs; ConsoleApp/Views/Admin/EmployeeView.cs</span></div>
+<div class="table-row"><span>Equipment add/edit/view</span><span>Controllers/EquipmentController.cs</span><span>Services/Administration/EquipmentManagementService.cs; EquipmentListView.cs; EquipmentDetailsView.cs</span></div>
+<div class="table-row"><span>Name-based employee selection</span><span>ConsoleApp/Views/Admin/EquipmentAssignmentView.cs</span><span>EmployeeService / EquipmentManagementService supply eligible users</span></div>
+<div class="table-row"><span>Admin ticket creation/reassignment</span><span>Controllers/AdminTicketController.cs</span><span>Services/Maintenance/MaintenanceService.cs</span></div>
+<div class="table-row"><span>Staff main menu</span><span>Controllers/StaffController.cs</span><span>IncidentController.cs and BackupController.cs</span></div>
+<div class="table-row"><span>Faulty equipment reporting</span><span>Controllers/IncidentController.cs</span><span>MaintenanceService.CreateAsync</span></div>
+<div class="table-row"><span>Technician menus</span><span>Controllers/TechnicianController.cs</span><span>TicketsMenuAsync, EquipmentMenuAsync, UpdateTicketAsync</span></div>
+<div class="table-row"><span>Technician equipment permission</span><span>Services/Reports/ReportsService.cs</span><span>EquipmentAsync, TechnicianEquipmentAsync; Services/Inventory/EquipmentService.cs</span></div>
+<div class="table-row"><span>Ticket read permissions</span><span>Services/Maintenance/MaintenanceService.cs</span><span>GetVisibleTickets, ListAsync, DetailAsync</span></div>
+<div class="table-row"><span>Approver menu and review prompts</span><span>Controllers/ApproverController.cs</span><span>ReviewEvidenceAndApproveRejectAsync; MaintenanceService.ReviewAsync</span></div>
+<div class="table-row"><span>Ticket list/detail formatting</span><span>ConsoleApp/Views/Shared/TicketView.cs</span><span>DTOs/TicketDetails.cs</span></div>
+<div class="table-row"><span>Backup prompts/history</span><span>Controllers/BackupController.cs</span><span>ConsoleApp/Views/Shared/BackupView.cs</span></div>
+<div class="table-row"><span>Backup access and ownership</span><span>Services/Backups/BackupsService.cs</span><span>Interfaces/Services/IBackupsService.cs</span></div>
+<div class="table-row"><span>Reservation selection/expiry/pickup</span><span>Services/Inventory/BackupReservationService.cs</span><span>Services/InventoryTransaction.cs</span></div>
+<div class="table-row"><span>Automatic due-ticket generation</span><span>Services/Maintenance/SchedulingService.cs</span><span>Services/Maintenance/Schedule.cs for date arithmetic</span></div>
+<div class="table-row"><span>Dashboard figures</span><span>Services/Reports/ReportsService.cs</span><span>ConsoleApp/Views/Admin/DashboardView.cs; DTOs/DashboardReport.cs</span></div>
+<div class="table-row"><span>Exception screens</span><span>Controllers/ExceptionDashboardController.cs</span><span>Services/Reports/ExceptionDashboardService.cs; ExceptionDashboardView.cs</span></div>
+<div class="table-row"><span>Audit display</span><span>ConsoleApp/Views/Admin/AuditView.cs</span><span>ReportsService.AuditAsync; Repositories/EfUnitOfWork.cs</span></div>
+<div class="table-row"><span>All menu layout/input</span><span>ConsoleApp/Views/Shared/ConsoleView.cs</span><span>ConsoleInput.cs; Controllers/MenuController.cs</span></div>
+<p>Names such as EquipmentDetailsView.cs in the table refer to files under ConsoleApp/Views/. Service contracts are under Interfaces/Services/.</p>
+<h2>3. Change a menu label or order</h2>
+<p>Open the controller&#x27;s RunAsync method, or its named submenu method. A typical entry looks like this:</p>
+<pre><code>[&quot;1&quot;] = (&quot;View assigned tickets&quot;, () =&gt; TicketLogsAsync(session)),
+[&quot;2&quot;] = (&quot;Update ticket&quot;, () =&gt; UpdateTicketAsync(session))</code></pre>
+<p>The number is the input the user types. The text is what the console displays. The function on the right is the action executed. Change only the text to rename an option. To reorder actions, move entries and renumber them 1, 2, 3 without gaps. Keep 0 for Back/logout; MenuController handles it separately.</p>
+<p>Update both displayed numbers and tests that type those numbers. The dictionary is displayed in its insertion order by ConsoleView.ReadMenuChoice. Changing its labels does not change service permissions or database data.</p>
+<p>ExceptionDashboardController is a special case: it uses a switch and ExceptionDashboardView.ReadOption rather than the shared dictionary. Change both the printed options and switch cases together. BackupView also contains the immediate pickup/cancel choices.</p>
+<h2>4. Add a screen option using an existing service</h2>
+<p>Example idea: add a read-only list to a menu.</p>
+<p>1. Find a service method that already returns the needed information.</p>
+<p>2. Add a private async controller method that calls it using the logged-in session.</p>
+<p>3. Pass its result to the appropriate view.</p>
+<p>4. Add a numbered dictionary entry calling the controller method.</p>
+<p>5. If the controller needs a new service, add a constructor parameter and field; update Program.cs and all test constructors.</p>
+<p>6. Try the option with an allowed account and an account that must not have access.</p>
+<p>For example, TechnicianController.TicketLogsAsync calls maintenance.ListAsync(session) and TicketView.ShowTickets. The service applies ownership filtering. Reuse that service rule instead of loading all tickets and hiding some on the screen.</p>
+<p>Do not put EF queries in a view. Do not create a database context in every controller action when an application service should own the operation.</p>
+<h2>5. Remove a feature from a screen</h2>
+<p>There are three different meanings of remove:</p>
+<p>- Hide the entry: remove its dictionary entry and renumber the remaining menu. The service remains usable elsewhere.</p>
+<p>- Remove the workflow: remove the entry and controller handler, then check whether other code uses its service operation before deleting it.</p>
+<p>- Remove stored data: requires a separate database design decision and usually a migration. Removing a menu does not require dropping a table.</p>
+<p>Use searches before deleting a method:</p>
+<pre><code>rg -n &#x27;MethodName&#x27; Controllers Services Interfaces Tests Program.cs</code></pre>
+<p>If no remaining feature needs the operation, remove its interface declaration, implementation, unused DTOs and constructor dependency as appropriate. Update Program.cs and tests. Keep historical ticket/review/allocation records unless deletion of that data is explicitly intended.</p>
+<p>Hiding a restricted action is not a security change. To disallow it for a role, update the service authorization too. Do not weaken other roles&#x27; access by accident.</p>
+<h2>6. Change the technician Update ticket flow</h2>
+<p>Open Controllers/TechnicianController.cs and find UpdateTicketAsync. The current sequence is:</p>
+<p>1. Read the ticket ID once.</p>
+<p>2. Load details through MaintenanceService.DetailAsync, which checks ownership.</p>
+<p>3. Show the ticket and previous response/rejection history using TicketView.ShowDetails.</p>
+<p>4. Check whether its status permits work.</p>
+<p>5. Read the response and call ProgressAsync.</p>
+<p>6. Add/update checklist evidence. Calibration tickets also collect measurements.</p>
+<p>7. Ask whether to send for approval. No keeps saved work for later.</p>
+<p>8. Read completion date and call SubmitAsync.</p>
+<p>To insert a new prompt, decide whether it is only display text, an input to an existing service, or a new stored field. Place the prompt at the correct step and pass its value to a service. Keep the ticket ID already captured; do not ask for it again at every step.</p>
+<p>Each successful service write increments the version. The controller reloads details between steps so the next operation uses the new version. If another session changes the ticket, stale-write protection can reject the action. Do not remove version checking just to avoid an error.</p>
+<p>Work is saved step by step, not as one transaction covering human input. Exiting or failing later can leave an already-saved response/evidence in place. Never hold a database transaction open while waiting for keyboard input.</p>
+<p>Checklist/measurement prompts are required by the current service rules. If you remove them from the UI without changing the business requirement, submission will fail when required evidence is missing. Do not invent passing evidence automatically.</p>
+<h2>7. Change approval or rejection</h2>
+<p>Screen: Controllers/ApproverController.cs, ReviewEvidenceAndApproveRejectAsync.</p>
+<p>Rules: Services/Maintenance/MaintenanceService.cs, ReviewAsync.</p>
+<p>Output: ConsoleApp/Views/Shared/TicketView.cs, ShowDetails.</p>
+<p>The screen loads a pending ticket, displays the technician response, then asks Accept or Reject. A blank rejection reason is prompted again. ReviewAsync also validates notes, approver ownership, ticket status and version, then saves the review and history.</p>
+<p>Rejecting keeps AssignedTo unchanged and sets rejected. That technician can update and resubmit. Accepting sets approved. CloseAsync separately changes approved to completed and updates equipment due dates. If you want acceptance to also close tickets, that is a business-rule change involving both operations and schedule tests, not just a menu rename.</p>
+<h2>8. Add a new business operation</h2>
+<p>Suppose a new feature must save a ticket comment.</p>
+<p>1. Decide who can add it, which ticket states permit it, what must be stored, and what the user sees afterward.</p>
+<p>2. Add a method to Interfaces/Services/IMaintenanceService.cs.</p>
+<p>3. Implement it in Services/Maintenance/MaintenanceService.cs.</p>
+<p>4. Open a unit of work through database.Open(). For mutations use the existing transaction pattern where appropriate.</p>
+<p>5. Check the session role through auth.RequireAsync, then ticket ownership/state/version.</p>
+<p>6. Validate text length and required values in the service, even if the screen validates too.</p>
+<p>7. Save the change, increment the version where it changes the ticket, and record history/audit as needed.</p>
+<p>8. Commit the transaction only after the related records have saved.</p>
+<p>9. Add the controller prompt and view output.</p>
+<p>10. Test allowed behavior, rejected behavior and persistence.</p>
+<p>Copy the structure of a nearby action such as ChecklistAsync, but adapt the rule rather than blindly copying its fields. DTOs are useful when an operation has many related arguments. Most existing services accept Session so the caller cannot choose another user&#x27;s identity.</p>
+<h2>9. Add a database field or a whole entity</h2>
+<p>For a field on an existing entity, such as an optional equipment note:</p>
+<p>1. Add the property to Models/Equipment.cs.</p>
+<p>2. Configure maximum length, nullability and mapping in Data/AppDbContext.cs as needed.</p>
+<p>3. Add the input/result property to relevant DTOs, such as SaveEquipmentInput or an equipment result.</p>
+<p>4. Validate and assign it in EquipmentManagementService.SaveEquipmentAsync.</p>
+<p>5. Collect/display it in EquipmentController and EquipmentDetailsView.</p>
+<p>6. Create and review a migration, including what happens to existing rows.</p>
+<p>7. Apply it to a development database and run relevant checks.</p>
+<p>For an entirely new entity, also expose its DbSet in AppDbContext, its IRepository property in Interfaces/Repositories/IUnitOfWork.cs, and its adapter property in Repositories/EfUnitOfWork.cs. Add foreign keys/indexes in the context configuration. A field added to an existing entity usually does not require a new repository property.</p>
+<p>With a compatible EF command-line tool already installed:</p>
+<pre><code>dotnet ef migrations add AddEquipmentNote --project EquipmentManagementBackend.csproj --configuration Release
+dotnet run --project EquipmentManagementBackend.csproj -c Release -- --migrate-only</code></pre>
+<p>Use a descriptive migration name matching your actual change. Review generated changes before applying. A required column on existing rows needs a sensible backfill or staged migration. Do not invent historical maintenance completion dates. Do not rewrite previously applied migrations to make a local database appear correct.</p>
+<p>Data/DesignTimeFactory.cs supplies configuration to EF tooling. Normal runtime configuration is in Program.cs. Both need the intended database connection.</p>
+<h2>10. Change filtering, tables and access</h2>
+<p>For a new printed ticket column, edit TicketView.ShowTickets or ShowDetails. If the returned Ticket already contains the value, a migration is unnecessary. If extra joined information is needed, extend the result DTO and service query first.</p>
+<p>For technician equipment lists, ReportsService.EquipmentAsync supplies the logged-in technician ID to the inventory service. EquipmentService.ListAsync applies that filter before Count/Skip/Take. Keep this order; filtering only a returned page gives incorrect counts and can expose other users&#x27; data.</p>
+<p>For single equipment lookup, ReportsService.TechnicianEquipmentAsync checks for an assigned ticket before returning details. Test both the list and direct-ID route. Removing a ticket assignment must remove access when no other qualifying assignment remains.</p>
+<h2>11. Change background behavior</h2>
+<p>SchedulingService.GenerateCoreAsync decides when scheduled tickets are created. Schedule.Next calculates the next date for each frequency. Program.cs starts SchedulingService.RunAsync.</p>
+<p>BackupReservationService handles inventory selection and expiration rules; BackupsService runs the expiry loop and exposes authorized operations. The running application must remain open for its periodic loops to execute. Actions also enforce relevant expiration rules.</p>
+<p>Change the business rule in the service, then test its boundary. Examples: exactly two days before due versus three days; pickup before expiration versus at expiration; two competing requests for one item. Keep the shared InventoryTransaction lock around dependent reads and writes.</p>
+<h2>12. Verify and diagnose your change</h2>
+<pre><code>dotnet build EquipmentManagementBackend.csproj -c Release
+dotnet run --project EquipmentManagementBackend.csproj -c Release -- --self-test</code></pre>
+<p>The build catches missing methods, wrong parameters and constructor mismatches. Self-tests exercise actual PostgreSQL behavior in an isolated temporary schema. They are run through --self-test, not merely dotnet test. Tests/Console/SelfTests.cs calls the focused test classes.</p>
+<p>Use AdminMenuTests for admin navigation, EquipmentCreationTests for equipment/scheduling, TechnicianDashboardTests for technician ownership and review flow, PasswordChangeTests for all role password menus, BackupFlowTests for backup interaction, and ExceptionDashboardTests for exception reporting.</p>
+<p>Menu tests feed a StringReader into Console.In. Each line is a typed answer. If you add a prompt, update that sequence in the same order; otherwise later answers may be interpreted as the wrong input. Always restore Console.In and Console.Out in finally blocks.</p>
+<p>If the running app locks the build executable, build into a separate output folder rather than stopping someone else&#x27;s session:</p>
+<pre><code>dotnet build EquipmentManagementBackend.csproj -c Release -o artifacts/equipment-verification --no-restore
+dotnet artifacts/equipment-verification/EquipmentManagementBackend.dll --self-test</code></pre>
+<p>Common diagnoses:</p>
+<p>- New option missing: wrong controller, stale executable, or option added to a submenu instead of the main menu.</p>
+<p>- Compile error after adding a dependency: update Program.cs and test constructor calls.</p>
+<p>- No database change: verify SaveChangesAsync and transaction commit, and confirm the configured connection.</p>
+<p>- Update refused: read role, ownership, state and stale-version checks before changing them.</p>
+<p>- Submission refused: inspect work report, checklist, calibration readings and approver assignment.</p>
+<p>- Wrong screen changed: check whether you edited LegacyWeb instead of the root console project.</p>
+<h2>13. A repeatable checklist for your next change</h2>
+<p>Write the desired user journey. Identify controller, view and service. Decide whether stored data changes. Implement the smallest coherent change. Preserve permissions and transaction rules. Update menu numbering and input tests. Build and run the relevant PostgreSQL checks. Update AI_CONTEXT_README.md and ConsoleApp/README.md when behavior changes. Report which files changed and what you actually verified.</p>
+<p>To hand work to another AI, provide AI_CONTEXT_README.md and the current repository or relevant source files. State the exact desired change. The handoff README explains the project, but it cannot replace source inspection or current test results.</p>
+<h2>Role-based view folders</h2>
+<p>Views are organized under <code>ConsoleApp/Views/</code>:</p>
+<p>- <code>Admin/</code>: employee, dashboard, audit, exception, reference and equipment-assignment views.</p>
+<p>- <code>Staff/StaffTicketView.cs</code>: staff ticket creation inputs and confirmation.</p>
+<p>- <code>Technician/TechnicianTicketView.cs</code>: technician response, checklist and calibration inputs.</p>
+<p>- <code>Approver/ApproverTicketView.cs</code>: accept/reject inputs and required rejection reason.</p>
+<p>- <code>Shared/</code>: reusable ticket, equipment and backup displays, console input/menu helpers and logging.</p>
+<p>Controllers still coordinate workflows; services still enforce permissions. Shared views do not grant access.</p>
+<p>View namespaces match these folders: <code>CriticalCare.ConsoleApp.Views.&lt;Folder&gt;</code>.</p></body></html>
